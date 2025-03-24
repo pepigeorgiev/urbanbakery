@@ -230,8 +230,8 @@
     <link rel="manifest" href="/manifest.json">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Фри-пек">
-    <meta name="apple-mobile-web-app-title" content="Фри-пек">
+    <meta name="application-name" content="Урбан">
+    <meta name="apple-mobile-web-app-title" content="Урбан">
     <meta name="theme-color" content="#ffffff">
     <meta name="msapplication-navbutton-color" content="#ffffff">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -247,7 +247,7 @@
     <link rel="apple-touch-icon" href="/images/icon-192x192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Фри-пек">
+    <meta name="apple-mobile-web-app-title" content="Урбан">
 
     <!-- iOS splash screen images -->
     <link rel="apple-touch-startup-image" href="/images/splash-640x1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)">
@@ -314,7 +314,7 @@
         <aside class="sidebar fixed md:relative w-64 h-screen bg-white shadow-lg transition-transform duration-300 ease-in-out z-40"
                :class="{ 'active': isOpen }">
             <div class="p-4 border-b">
-                <h1 class="text-xl font-bold">Фри-пек</h1>
+                <h1 class="text-xl font-bold">Урбан</h1>
                 <p class="text-sm text-gray-600">{{ auth()->user()->name }}</p>
                 <p class="text-xs text-gray-500">{{ ucfirst(auth()->user()->role) }}</p>
             </div>
@@ -380,6 +380,22 @@
        class="block px-4 py-2 text-gray-600 hover:bg-gray-100 {{ request()->routeIs('install.show') ? 'bg-gray-200' : '' }}">
         <i class="fas fa-mobile-alt mr-2"></i>
         Инсталирај апликација
+    </a>
+@endif
+
+<a href="{{ route('bread-orders.index') }}" 
+   @click="isOpen = false"
+   class="block px-4 py-2 text-gray-600 hover:bg-gray-100 {{ request()->routeIs('bread-orders.*') ? 'bg-gray-200' : '' }}">
+    <i class="fas fa-bread-slice mr-2"></i>
+    Нарачка на леб
+</a>
+
+@if(auth()->user()->role === 'admin-user' || auth()->user()->role === 'admin-admin')
+    <a href="{{ route('bread-orders.summary') }}" 
+       @click="isOpen = false"
+       class="block px-4 py-2 text-gray-600 hover:bg-gray-100 {{ request()->routeIs('bread-orders.summary') ? 'bg-gray-200' : '' }}">
+        <i class="fas fa-list-alt mr-2"></i>
+        Преглед на нарачки
     </a>
 @endif
 

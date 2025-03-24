@@ -7,7 +7,7 @@
                 <div class="p-6 bg-white border-b border-gray-200">
                     <div class="text-center">
                         <h3 class="text-lg font-medium mb-4">
-                            Инсталирајте ја Фри-пек апликацијата на вашиот уред
+                            Инсталирајте ја Урбан бакери апликацијата на вашиот уред
                         </h3>
                         
                         <div class="space-y-4">

@@ -13,6 +13,7 @@ use App\Http\Controllers\MonthlySummaryController;
 use App\Http\Controllers\SummaryController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\TransactionHistoryController;
+use App\Http\Controllers\BreadOrdersController;
 use App\Http\Controllers\InstallController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -145,6 +146,13 @@ Route::get('/api/check-session', function () {
     ]);
 });
 Route::post('/summary/update-yesterday', [SummaryController::class, 'updateYesterday'])->name('summary.updateYesterday');
+
+// Bread Orders routes
+Route::middleware(['auth'])->group(function () {
+    Route::get('/bread-orders', [BreadOrdersController::class, 'index'])->name('bread-orders.index');
+    Route::post('/bread-orders', [BreadOrdersController::class, 'store'])->name('bread-orders.store');
+    Route::get('/bread-orders/summary', [BreadOrdersController::class, 'summary'])->name('bread-orders.summary');
+});
 
 // Schema check for debugging
 Route::get('/check-schema', function() {
