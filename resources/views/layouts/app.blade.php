@@ -267,7 +267,9 @@
                     if (userRole === 'user') {
                         // Redirect to daily transactions if on home page
                         if (window.location.pathname === '/' || window.location.pathname === '/dashboard') {
-                            window.location.href = 'https://fripekapp.mk/daily-transactions/create';
+                            window.location.href = '{{ route('daily-transactions.create') }}';
+
+                            // window.location.href = 'https://fripekapp.mk/daily-transactions/create';
                         }
 
                         // Handle when app is resumed/focused
