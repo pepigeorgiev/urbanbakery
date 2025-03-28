@@ -19,7 +19,8 @@
     <!-- PWA Meta Tags -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#ffffff">
-    <link rel="manifest" href="{{ asset('manifest.json') }}" crossorigin="use-credentials">
+    <link rel="manifest" href="{{ asset('manifest.json') }}?v={{ time() }}" crossorigin="use-credentials">
+    <!-- <link rel="manifest" href="{{ asset('manifest.json') }}" crossorigin="use-credentials"> -->
     <link rel="apple-touch-icon" href="{{ asset('images/icon-192x192.png') }}">
 
     <!-- Debug meta tag to force HTTPS -->
@@ -273,7 +274,10 @@
                         document.addEventListener('visibilitychange', function() {
                             if (document.visibilityState === 'visible' && 
                                 (window.location.pathname === '/' || window.location.pathname === '/dashboard')) {
-                                window.location.href = 'https://fripekapp.mk/daily-transactions/create';
+                                    window.location.href = '{{ route('daily-transactions.create') }}';
+
+
+                                    // window.location.href = 'https://fripekapp.mk/daily-transactions/create';
                             }
                         });
 
