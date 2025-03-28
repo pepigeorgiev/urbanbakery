@@ -284,7 +284,9 @@
                         // Handle back button
                         window.addEventListener('popstate', function() {
                             if (window.location.pathname === '/' || window.location.pathname === '/dashboard') {
-                                window.location.href = 'https://fripekapp.mk/daily-transactions/create';
+                                window.location.href = '{{ route('daily-transactions.create') }}';
+
+                                // window.location.href = 'https://fripekapp.mk/daily-transactions/create';
                             }
                         });
                     }
