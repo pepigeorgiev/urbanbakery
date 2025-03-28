@@ -1,13 +1,13 @@
 {
     "id": "/",
-    "name": "Fripek App",
-    "short_name": "Fripek",
+    "name": "Urban App",
+    "short_name": "Urban",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#000000",
-    "description": "Фри-пек Систем за Менаџмент",
+    "description": "Урбан Систем за Менаџмент",
     "orientation": "any",
     "icons": [
         {

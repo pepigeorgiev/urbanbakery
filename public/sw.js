@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fripek-app-v1';
+const CACHE_NAME = 'urban-app-v1';
 
 self.addEventListener('install', event => {
     console.log('Service Worker installing.');
