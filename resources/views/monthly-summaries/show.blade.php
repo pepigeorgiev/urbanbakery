@@ -99,8 +99,11 @@
                                 {{ $totals['name'] }}
                             </td>
                             <td class="border px-4 py-3 text-sm text-center font-medium">
+    {{ number_format($totals['company_price'], 2) }}ден.
+</td>
+                            <!-- <td class="border px-4 py-3 text-sm text-center font-medium">
                                 {{ number_format($totals['company_price']) }}ден.
-                            </td>
+                            </td> -->
                             @for ($day = 1; $day <= $endDate->day; $day++)
                                 @php
                                     $date = $startDate->copy()->addDays($day - 1)->format('Y-m-d');
@@ -120,8 +123,12 @@
                                 ВК:{{ $totals['total'] }}
                             </td>
                             <td class="border px-4 py-3 text-sm text-center bg-gray-50 font-medium">
+    {{ number_format($totals['total_price'], 2) }}ден.
+</td>
+
+                            <!-- <td class="border px-4 py-3 text-sm text-center bg-gray-50 font-medium">
                                 {{ number_format($totals['total_price']) }}ден.
-                            </td>
+                            </td> -->
                         </tr>
                     @endforeach
                 </tbody>
@@ -131,8 +138,11 @@
                             Вкупно:
                         </td>
                         <td class="border px-4 py-3 text-center font-medium bg-gray-50">
+    {{ number_format(collect($monthlyTotals)->sum('total_price'), 2) }}ден.
+</td>
+                        <!-- <td class="border px-4 py-3 text-center font-medium bg-gray-50">
                             {{ number_format(collect($monthlyTotals)->sum('total_price')) }}ден.
-                        </td>
+                        </td> -->
                     </tr>
                 </tfoot>
             </table>
