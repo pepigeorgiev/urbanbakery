@@ -19,6 +19,12 @@ class SummaryController extends Controller
 {
     public function index(Request $request)
     {
+
+          // First check if we have a date range specified
+    if ($request->has('start_date') && $request->has('end_date')) {
+        return $this->dateRangeSummary($request);
+    }
+
         $currentUser = Auth::user();
     
         // Get all users for admin dropdown (excluding super admin)
@@ -1362,6 +1368,263 @@ public function updateYesterday(Request $request)
             ->back()
             ->with('error', 'Грешка при ажурирање на табелата за вчерашен леб: ' . $e->getMessage());
     }
+}
+
+private function handleDateRangeFilter(Request $request)
+{
+    // Check if we have a date range filter
+    $hasDateRange = $request->has('start_date') && $request->has('end_date');
+    
+    if (!$hasDateRange) {
+        // No date range filter, continue with normal flow
+        return false;
+    }
+    
+    $startDate = $request->input('start_date');
+    $endDate = $request->input('end_date');
+    
+    // Validate dates
+    if (!$startDate || !$endDate) {
+        return false;
+    }
+    
+    try {
+        // Parse dates
+        $startDate = Carbon::parse($startDate)->startOfDay();
+        $endDate = Carbon::parse($endDate)->endOfDay();
+        
+        // Ensure start date is before end date
+        if ($startDate->gt($endDate)) {
+            return false;
+        }
+        
+        return [
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString()
+        ];
+    } catch (\Exception $e) {
+        Log::error('Date range filter error: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Get date range summary
+ * 
+ * Add this function to your SummaryController class
+ */
+public function dateRangeSummary(Request $request)
+{
+    $dateRange = $this->handleDateRangeFilter($request);
+    
+    if (!$dateRange) {
+        // No valid date range, redirect to normal index
+        return redirect()->route('summary.index');
+    }
+    
+    $startDate = $dateRange['start_date'];
+    $endDate = $dateRange['end_date'];
+    
+    // Get current user
+    $currentUser = Auth::user();
+    
+    // Get users for admin dropdown
+    $users = User::where('role', '!=', 'super_admin')
+                ->orderBy('name')
+                ->get();
+    
+    // Get selected user ID
+    $selectedUserId = $request->get('user_id');
+    
+    // Determine which companies to show
+    if ($currentUser->isAdmin() || $currentUser->role === 'super_admin') {
+        if ($selectedUserId) {
+            $selectedUser = User::find($selectedUserId);
+            $allCompanies = $selectedUser->companies;
+        } else {
+            // If no user selected, show all companies
+            $allCompanies = Company::all();
+        }
+    } else {
+        $allCompanies = $currentUser->companies;
+    }
+    
+    // Check if companies exist
+    if ($allCompanies->isEmpty()) {
+        return redirect()->back()->with('error', 'Нема компанија поврзана со вашиот акаунт.');
+    }
+    
+    $company = $allCompanies->first();
+    
+    // Get all transactions within date range
+    $transactions = DailyTransaction::with(['breadType', 'company'])
+        ->whereNotNull('bread_type_id')
+        ->whereHas('breadType')
+        ->whereDate('transaction_date', '>=', $startDate)
+        ->whereDate('transaction_date', '<=', $endDate)
+        ->whereIn('company_id', $allCompanies->pluck('id'))
+        ->get();
+    
+    // Group transactions by bread type and company
+    $breadTypeTransactions = $transactions->groupBy('bread_type_id');
+    $companyTransactions = $transactions->groupBy('company_id');
+    
+    // Get total bread quantities and amounts
+    $breadSummary = [];
+    $totalQuantity = 0;
+    $totalAmount = 0;
+    
+    foreach ($breadTypeTransactions as $breadTypeId => $typeTransactions) {
+        $breadType = BreadType::find($breadTypeId);
+        if (!$breadType) continue;
+        
+        $delivered = $typeTransactions->sum('delivered');
+        $returned = $typeTransactions->sum('returned');
+        $gratis = $typeTransactions->sum('gratis') ?? 0;
+        $netQuantity = $delivered - $returned - $gratis;
+        
+        if ($netQuantity <= 0) continue;
+        
+        $amount = $netQuantity * $breadType->price;
+        
+        $breadSummary[] = [
+            'bread_type' => $breadType->name,
+            'quantity' => $netQuantity,
+            'price' => $breadType->price,
+            'amount' => $amount
+        ];
+        
+        $totalQuantity += $netQuantity;
+        $totalAmount += $amount;
+    }
+    
+    // Get company summaries
+    $cashCompanies = [];
+    $invoiceCompanies = [];
+    $totalCashAmount = 0;
+    $totalInvoiceAmount = 0;
+    
+    foreach ($companyTransactions as $companyId => $companyTrans) {
+        $company = $allCompanies->firstWhere('id', $companyId);
+        if (!$company) continue;
+        
+        $companyAmount = 0;
+        $validTransactions = false;
+        
+        foreach ($companyTrans as $transaction) {
+            if (!$transaction->breadType) continue;
+            
+            // Skip unpaid cash transactions
+            if ($company->type === 'cash' && !$transaction->is_paid) {
+                continue;
+            }
+            
+            $delivered = $transaction->delivered;
+            $returned = $transaction->returned;
+            $gratis = $transaction->gratis ?? 0;
+            $netQuantity = $delivered - $returned - $gratis;
+            
+            if ($netQuantity <= 0) continue;
+            
+            $validTransactions = true;
+            $price = $transaction->breadType->getPriceForCompany($companyId, $transaction->transaction_date)['price'];
+            $amount = $netQuantity * $price;
+            $companyAmount += $amount;
+        }
+        
+        if (!$validTransactions) continue;
+        
+        $companySummary = [
+            'name' => $company->name,
+            'amount' => $companyAmount
+        ];
+        
+        if ($company->type === 'cash') {
+            $cashCompanies[] = $companySummary;
+            $totalCashAmount += $companyAmount;
+        } else {
+            $invoiceCompanies[] = $companySummary;
+            $totalInvoiceAmount += $companyAmount;
+        }
+    }
+    
+    // Get bread sales within date range
+    $breadSales = BreadSale::whereDate('transaction_date', '>=', $startDate)
+        ->whereDate('transaction_date', '<=', $endDate);
+    
+    if (!$currentUser->isAdmin() && $currentUser->role !== 'super_admin') {
+        $breadSales->whereIn('company_id', $currentUser->companies->pluck('id'));
+    } elseif ($selectedUserId) {
+        $breadSales->whereIn('company_id', User::find($selectedUserId)->companies->pluck('id'));
+    }
+    
+    $breadSales = $breadSales->get();
+
+    $oldBreadQuery = DailyTransaction::whereDate('transaction_date', '>=', $startDate)
+    ->whereDate('transaction_date', '<=', $endDate)
+    ->whereNotNull('old_bread_sold')
+    ->where('old_bread_sold', '>', 0);
+
+// Apply user/company filters
+if (!$currentUser->isAdmin() && $currentUser->role !== 'super_admin') {
+    $oldBreadQuery->whereIn('company_id', $currentUser->companies->pluck('id'));
+} elseif ($selectedUserId) {
+    $oldBreadQuery->whereIn('company_id', User::find($selectedUserId)->companies->pluck('id'));
+}
+
+// Get the total sum of old bread sold
+$oldBreadSold = $oldBreadQuery->sum('old_bread_sold');
+
+// Now calculate the total amount by joining with bread types
+$oldBreadItems = $oldBreadQuery->with('breadType')->get();
+
+$oldBreadTotal = 0;
+
+foreach ($oldBreadItems as $item) {
+    if (!$item->breadType) continue;
+    
+    $oldBreadTotal += $item->old_bread_sold * ($item->breadType->old_price ?? 0);
+}
+
+// For debugging
+Log::info('Old bread calculation (alternative method)', [
+    'old_bread_sold' => $oldBreadSold,
+    'old_bread_total' => $oldBreadTotal,
+    'transactions_count' => $oldBreadItems->count(),
+]);
+    
+    // $oldBreadSold = $breadSales->sum('old_bread_sold');
+    // $oldBreadTotal = 0;
+    
+    // foreach ($breadSales as $sale) {
+    //     $breadType = BreadType::find($sale->bread_type_id);
+    //     if (!$breadType) continue;
+        
+    //     $oldBreadTotal += $sale->old_bread_sold * ($breadType->old_price ?? 0);
+    // }
+    
+    // Prepare data for view
+    $data = [
+        'startDate' => $startDate,
+        'endDate' => $endDate,
+        'breadSummary' => $breadSummary,
+        'totalQuantity' => $totalQuantity,
+        'totalAmount' => $totalAmount,
+        'cashCompanies' => $cashCompanies,
+        'invoiceCompanies' => $invoiceCompanies,
+        'totalCashAmount' => $totalCashAmount,
+        'totalInvoiceAmount' => $totalInvoiceAmount,
+        'oldBreadSold' => $oldBreadSold,
+        'oldBreadTotal' => $oldBreadTotal,
+        'grandTotal' => $totalAmount + $totalCashAmount + $oldBreadTotal,
+        'currentUser' => $currentUser,
+        'users' => $users,
+        'selectedUserId' => $selectedUserId,
+        'allCompanies' => $allCompanies,
+        'company' => $company
+    ];
+    
+    return view('summary.date-range', $data);
 }
 
     public function showAdditionalTable(Request $request)

@@ -86,11 +86,12 @@
     }
 </style>
     </style>
-<div class="container mx-auto">
+    <div class="container mx-auto">
     <h1 class="text-2xl font-bold mb-4">Денешен преглед - Сите компании</h1>
     <div class="container mx-auto px-0 py-6">
         <div class="mb-6">
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center gap-4">
+                <!-- User selector dropdown - only for admins -->
                 @if($currentUser->isAdmin() || $currentUser->role === 'super_admin')
                     <form method="GET" action="{{ route('summary.index') }}" class="flex items-center">
                         @if(request()->has('date'))
@@ -110,12 +111,20 @@
                             @endforeach
                         </select>
                     </form>
-                @endif
 
+                       <!-- Date selector - available to ALL users including regular users -->
                 @include('components.date-selector', ['availableDates' => $availableDates])
+                    
+                    <!-- Date range filter - ONLY FOR ADMINS -->
+                    @include('components.date-range-filter')
+                @endif
+                
+             
             </div>
         </div>
 
+
+        
 
         
 

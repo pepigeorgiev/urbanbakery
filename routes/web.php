@@ -160,3 +160,7 @@ Route::get('/check-schema', function() {
     dd($table);
 });
 
+Route::get('/summary/date-range', [App\Http\Controllers\SummaryController::class, 'dateRangeSummary'])
+    ->name('summary.date-range')
+    ->middleware(['auth']);
+
