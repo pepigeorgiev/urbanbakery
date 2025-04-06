@@ -111,15 +111,15 @@
                             @endforeach
                         </select>
                     </form>
-
-                       <!-- Date selector - available to ALL users including regular users -->
-                @include('components.date-selector', ['availableDates' => $availableDates])
-                    
-                    <!-- Date range filter - ONLY FOR ADMINS -->
-                    @include('components.date-range-filter')
                 @endif
                 
-             
+                <!-- Date selector - for ALL users -->
+                @include('components.date-selector', ['availableDates' => $availableDates])
+                
+                <!-- Date range filter - only for admins -->
+                @if($currentUser->isAdmin() || $currentUser->role === 'super_admin')
+                    @include('components.date-range-filter')
+                @endif
             </div>
         </div>
 
