@@ -1,5 +1,3 @@
-{{-- Save this as resources/views/summary/date-range.blade.php --}}
-
 @extends('layouts.app')
 
 @section('content')
@@ -159,7 +157,7 @@
 
             <!-- Invoice Companies -->
             <div>
-                <h2 class="text-xl font-semibold mb-4">Компании со фактура</h2>
+                <h2 class="text-xl font-semibold mb-4">Компании со плаќање на фактура</h2>
                 <div class="bg-white shadow-md rounded overflow-hidden">
                     <table class="w-full table-auto">
                         <thead class="bg-gray-100">
