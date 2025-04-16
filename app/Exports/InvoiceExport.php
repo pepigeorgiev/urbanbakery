@@ -43,18 +43,13 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
         $result = new Collection();
 
         $query = "
-        WITH latest_prices AS (
+            WITH latest_prices AS (
     SELECT 
         bread_type_id,
         company_id,
         price,
         valid_from,
-        ROW_NUMBER() OVER (
-            PARTITION BY bread_type_id, company_id 
-            ORDER BY 
-                valid_from DESC, 
-                created_at DESC  // Add this to break ties
-        ) as rn
+        ROW_NUMBER() OVER (PARTITION BY bread_type_id, company_id ORDER BY valid_from DESC) as rn
     FROM bread_type_company
     WHERE valid_from <= ?
 )
@@ -64,11 +59,7 @@ SELECT
     bt.code as bread_code,
     bt.name as bread_name,
     SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
-    COALESCE(
-        lp.price,  // Most recent company-specific price
-        btp.price, // Fallback to bread type default price
-        bt.price   // Final fallback to bread type price
-    ) as price,
+    COALESCE(lp.price, bt.price) as price,
     c.mygpm_business_unit,
     cu.user_id,
     COALESCE(bto.display_order, 999) as display_order
@@ -78,9 +69,6 @@ JOIN bread_types bt ON dt.bread_type_id = bt.id
 LEFT JOIN latest_prices lp ON lp.bread_type_id = dt.bread_type_id 
     AND lp.company_id = dt.company_id
     AND lp.rn = 1
-LEFT JOIN bread_type_prices btp ON btp.bread_type_id = dt.bread_type_id 
-    AND btp.valid_from <= ?
-    AND btp.rn = 1  // Assuming similar latest price selection for bread type prices
 LEFT JOIN company_user cu ON c.id = cu.company_id
 LEFT JOIN bread_type_order bto ON bt.id = bto.bread_type_id
 WHERE c.type = 'invoice'
@@ -90,11 +78,7 @@ GROUP BY
     c.name,
     bt.code,
     bt.name,
-    COALESCE(
-        lp.price,
-        btp.price,
-        bt.price
-    ),
+    COALESCE(lp.price, bt.price),
     c.mygpm_business_unit,
     cu.user_id,
     COALESCE(bto.display_order, 999)
@@ -105,49 +89,8 @@ ORDER BY
     c.name,
     display_order,
     bt.code
-            // WITH latest_prices AS (
-            //     SELECT 
-            //         bread_type_id,
-            //         company_id,
-            //         price,
-            //         valid_from,
-            //         ROW_NUMBER() OVER (PARTITION BY bread_type_id, company_id ORDER BY valid_from DESC) as rn
-            //     FROM bread_type_company
-            //     WHERE valid_from <= ?
-            // )
-            // SELECT 
-            //     c.code as company_code,
-            //     c.name as company_name,
-            //     bt.code as bread_code,
-            //     bt.name as bread_name,
-            //     SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
-            //     COALESCE(lp.price, bt.price) as price,
-            //     c.mygpm_business_unit,
-            //     cu.user_id
-            // FROM daily_transactions dt
-            // JOIN companies c ON dt.company_id = c.id
-            // JOIN bread_types bt ON dt.bread_type_id = bt.id
-            // LEFT JOIN latest_prices lp ON lp.bread_type_id = dt.bread_type_id 
-            //     AND lp.company_id = dt.company_id
-            //     AND lp.rn = 1
-            // LEFT JOIN company_user cu ON c.id = cu.company_id
-            // WHERE c.type = 'invoice'
-            // AND dt.transaction_date BETWEEN ? AND ?
-            // GROUP BY 
-            //     c.code,
-            //     c.name,
-            //     bt.code,
-            //     bt.name,
-            //     COALESCE(lp.price, bt.price),
-            //     c.mygpm_business_unit,
-            //     cu.user_id
-            // HAVING SUM(dt.delivered - dt.returned - dt.gratis) > 0
-            // ORDER BY 
-            //     cu.user_id,
-            //     c.code,
-            //     c.name,
-            //     bt.code
-        ";
+";
+        
 
         // Log the query parameters
         \Log::info('Executing export query with params:', [
