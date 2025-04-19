@@ -99,6 +99,61 @@ input[type=number] {
         </form>
     </div>
 
+    @if(isset($isLocked) && $isLocked)
+    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mt-4 mb-4 rounded shadow">
+        <div class="flex items-center">
+            <svg class="h-6 w-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path>
+            </svg>
+            <div>
+                <p class="font-bold">Овој ден е заклучен!</p>
+                <p>Контактирајте го Администраторот доколку сакате да правете измени за овој ден!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Disable all form inputs
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            // Skip the filter form for selecting dates/companies
+            if (form.id === 'filterForm') return;
+            
+            const inputs = form.querySelectorAll('input, select, textarea, button');
+            inputs.forEach(input => {
+                input.disabled = true;
+                
+                // Add visual indication
+                if (input.tagName === 'BUTTON') {
+                    input.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                }
+            });
+        });
+        
+        // Disable other buttons that might not be in forms
+        const otherButtons = document.querySelectorAll('button:not([form])');
+        otherButtons.forEach(button => {
+            if (!button.closest('form[id="filterForm"]')) {
+                button.disabled = true;
+                button.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        });
+        
+        // Show message on any form submission attempt
+        document.body.addEventListener('click', function(e) {
+            if (e.target.type === 'submit' || e.target.tagName === 'BUTTON') {
+                e.preventDefault();
+                alert('Денот е заклучен. Не можете да правите промени.');
+                return false;
+            }
+        }, true);
+    });
+    </script>
+@endif
+
     <!-- Toggle buttons -->
     <div class="mt-4 px-2 md:px-0 flex space-x-4">
         <button type="button" id="dailyTransactionsButton" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm md:text-base">
@@ -1713,6 +1768,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Call the refresh function with a slight delay to ensure the page is fully loaded
     setTimeout(refreshCSRFTokenOnLoad, 500);
 });
+
 </script>
 
 

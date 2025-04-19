@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Models\LockedDay;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
@@ -198,6 +199,25 @@ elseif ($currentUser->isAdmin() || $currentUser->role === 'super_admin') {
         $todayBreadTotal = $totals['totalInPrice'];
     $yesterdayBreadTotal = $additionalTableData['totalPrice'];
     $breadSalesTotal = $todayBreadTotal + $yesterdayBreadTotal;
+
+     // Check if the selected day is locked
+$isGloballyLocked = LockedDay::where('locked_date', $selectedDate)
+->whereNull('user_id')
+->exists();
+
+$isUserLocked = false;
+$lockInfo = null;
+
+if ($selectedUserId) {
+// Check if day is locked specifically for this user
+$lockInfo = LockedDay::where('locked_date', $selectedDate)
+    ->where('user_id', $selectedUserId)
+    ->with('admin')
+    ->first();
+    
+$isUserLocked = (bool) $lockInfo;
+}
+
     
         return view('summary', [
             'breadTypes' => $breadTypes,
@@ -231,11 +251,84 @@ elseif ($currentUser->isAdmin() || $currentUser->role === 'super_admin') {
             'selectedUserId' => $selectedUserId,
             'currentUser' => $currentUser,
             'company' => $company,
+            'isGloballyLocked' => $isGloballyLocked,
+            'isUserLocked' => $isUserLocked,
+            'lockInfo' => $lockInfo,
             'allCompanies' => $allCompanies
 
         ]);
     }
     
+    /**
+ * Lock a specific day for a user or all users
+ */
+public function lockDay(Request $request)
+{
+    // Validate request
+    $request->validate([
+        'date' => 'required|date'
+    ]);
+
+    $date = $request->input('date');
+    $userId = $request->input('user_id'); // This will be null if "All Users" is selected
+    $admin = Auth::user();
+
+    // Only admins can lock days
+    if (!$admin->isAdmin() && $admin->role !== 'super_admin') {
+        return back()->with('error', 'Немате дозвола да заклучувате денови.');
+    }
+    
+    // Check if day is already locked
+    $existingLock = LockedDay::where('locked_date', $date)
+        ->where(function($query) use ($userId) {
+            if ($userId) {
+                $query->where('user_id', $userId);
+            } else {
+                $query->whereNull('user_id');
+            }
+        })
+        ->first();
+        
+    if ($existingLock) {
+        return back()->with('info', 'Овој ден е веќе заклучен.');
+    }
+    
+    // Create lock
+    LockedDay::lockDate($date, $userId, $admin->id);
+    
+    $message = $userId ? 'Денот е заклучен за избраниот корисник.' : 'Денот е заклучен за сите корисници.';
+    return back()->with('success', $message);
+}
+
+/**
+ * Unlock a specific day for a user or all users
+ */
+public function unlockDay(Request $request)
+{
+    // Validate request
+    $request->validate([
+        'date' => 'required|date'
+    ]);
+
+    $date = $request->input('date');
+    $userId = $request->input('user_id'); // This will be null if "All Users" is selected
+    $admin = Auth::user();
+
+    // Only admins can unlock days
+    if (!$admin->isAdmin() && $admin->role !== 'super_admin') {
+        return back()->with('error', 'Немате дозвола да отклучувате денови.');
+    }
+    
+    // Unlock the day
+    $unlocked = LockedDay::unlockDate($date, $userId);
+    
+    if ($unlocked) {
+        $message = $userId ? 'Денот е отклучен за избраниот корисник.' : 'Денот е отклучен за сите корисници.';
+        return back()->with('success', $message);
+    } else {
+        return back()->with('info', 'Нема заклучени денови за отклучување.');
+    }
+}
 
 
     private function calculateBreadCounts($transactions, $date, $breadSales,$company)

@@ -68,25 +68,67 @@ Route::put('/companies/{company}/update-bread-types', [CompanyController::class,
         ->name('monthly-summary.show');
     Route::get('/monthly-summary/{company}/export', [MonthlySummaryController::class, 'export'])
         ->name('monthly-summary.export');
+
+
+        Route::middleware(['auth'])->group(function () {
+
+            // Daily Transactions
+            Route::resource('daily-transactions', DailyTransactionController::class);
+            Route::post('/daily-transactions/mark-as-paid', [DailyTransactionController::class, 'markAsPaid'])
+                ->name('daily-transactions.markAsPaid')
+                // ->middleware('checkDayLock');
+                ->middleware(\App\Http\Middleware\CheckDayLock::class);
+        
+        
+            Route::post('/daily-transactions/mark-multiple-as-paid', [SummaryController::class, 'markMultipleAsPaid'])
+                ->name('daily-transactions.markMultipleAsPaid')
+                // ->middleware('checkDayLock');
+                ->middleware(\App\Http\Middleware\CheckDayLock::class);
+        
+        
+            Route::get('/daily-transactions/unpaid', [DailyTransactionController::class, 'getUnpaidTransactions'])
+                ->name('daily-transactions.unpaid')
+                ->middleware(\App\Http\Middleware\CheckDayLock::class);
+        
+            Route::post('/daily-transactions/store-old-bread', [DailyTransactionController::class, 'storeOldBreadSales'])
+                ->name('daily-transactions.store-old-bread')
+                ->middleware(\App\Http\Middleware\CheckDayLock::class);
+        
+            Route::post('/update-daily-transaction', [DailyTransactionController::class, 'updateDailyTransaction'])
+                ->name('update-daily-transaction')
+                // ->middleware('checkDayLock');
+                ->middleware(\App\Http\Middleware\CheckDayLock::class);
+        
+        
+                
+            
+            // Summary
+            Route::get('/summary', [SummaryController::class, 'index'])->name('summary.index');
+            Route::post('/summary/update', [SummaryController::class, 'update'])->name('summary.update');
+            Route::post('/summary/update-additional', [SummaryController::class, 'updateAdditional'])
+                ->name('summary.updateAdditional');
+                
+        
+            });
     
-    // Daily Transactions
-    Route::resource('daily-transactions', DailyTransactionController::class);
-    Route::post('/daily-transactions/mark-as-paid', [DailyTransactionController::class, 'markAsPaid'])
-        ->name('daily-transactions.markAsPaid');
-    Route::post('/daily-transactions/mark-multiple-as-paid', [SummaryController::class, 'markMultipleAsPaid'])
-        ->name('daily-transactions.markMultipleAsPaid');
-    Route::get('/daily-transactions/unpaid', [DailyTransactionController::class, 'getUnpaidTransactions'])
-        ->name('daily-transactions.unpaid');
-    Route::post('/daily-transactions/store-old-bread', [DailyTransactionController::class, 'storeOldBreadSales'])
-        ->name('daily-transactions.store-old-bread');
-    Route::post('/update-daily-transaction', [DailyTransactionController::class, 'updateDailyTransaction'])
-        ->name('update-daily-transaction');
+    // // Daily Transactions
+    // Route::resource('daily-transactions', DailyTransactionController::class);
+    // Route::post('/daily-transactions/mark-as-paid', [DailyTransactionController::class, 'markAsPaid'])
+    //     ->name('daily-transactions.markAsPaid');
+    // Route::post('/daily-transactions/mark-multiple-as-paid', [SummaryController::class, 'markMultipleAsPaid'])
+    //     ->name('daily-transactions.markMultipleAsPaid');
+    // Route::get('/daily-transactions/unpaid', [DailyTransactionController::class, 'getUnpaidTransactions'])
+    //     ->name('daily-transactions.unpaid');
+    // Route::post('/daily-transactions/store-old-bread', [DailyTransactionController::class, 'storeOldBreadSales'])
+    //     ->name('daily-transactions.store-old-bread');
+    // Route::post('/update-daily-transaction', [DailyTransactionController::class, 'updateDailyTransaction'])
+    //     ->name('update-daily-transaction');
     
-    // Summary
-    Route::get('/summary', [SummaryController::class, 'index'])->name('summary.index');
-    Route::post('/summary/update', [SummaryController::class, 'update'])->name('summary.update');
-    Route::post('/summary/update-additional', [SummaryController::class, 'updateAdditional'])
-        ->name('summary.updateAdditional');
+    // // Summary
+    // Route::get('/summary', [SummaryController::class, 'index'])->name('summary.index');
+    // Route::post('/summary/update', [SummaryController::class, 'update'])->name('summary.update');
+    // Route::post('/summary/update-additional', [SummaryController::class, 'updateAdditional'])
+    //     ->name('summary.updateAdditional');
     
     // Bread Types
     Route::resource('bread-types', BreadTypeController::class);
@@ -163,4 +205,10 @@ Route::get('/check-schema', function() {
 Route::get('/summary/date-range', [App\Http\Controllers\SummaryController::class, 'dateRangeSummary'])
     ->name('summary.date-range')
     ->middleware(['auth']);
+
+    // Day locking/unlocking routes (admin only)
+Route::middleware(['auth'])->group(function () {
+    Route::post('/summary/lock-day', [SummaryController::class, 'lockDay'])->name('summary.lockDay');
+    Route::post('/summary/unlock-day', [SummaryController::class, 'unlockDay'])->name('summary.unlockDay');
+});
 
