@@ -1823,13 +1823,122 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     });
                     
-                    // Re-initialize Select2
-                    $('#company_id').select2('destroy').select2({
-                        placeholder: 'Изберете компанија',
-                        allowClear: true,
-                        width: '100%',
-                        dropdownParent: $('body')
-                    });
+
+                         // Re-initialize Select2 WITH the custom matcher for transliteration
+$('#company_id').select2('destroy').select2({
+    placeholder: 'Изберете компанија',
+    allowClear: true,
+    width: '100%',
+    dropdownParent: $('body'),
+    // IMPORTANT: Keep the matcher function that handles transliteration
+    matcher: function(params, data) {
+        // If no search term, return all data
+        if (!params.term || $.trim(params.term) === '') {
+            return data;
+        }
+        
+        // If there's no 'text' property, this data object can't be matched
+        if (typeof data.text === 'undefined') {
+            return null;
+        }
+        
+        const searchTerm = params.term.toLowerCase();
+        const originalText = data.text.toLowerCase();
+        
+        // Check for direct match first (most efficient)
+        if (originalText.indexOf(searchTerm) > -1) {
+            return data;
+        }
+        
+        // Simple character-by-character transliteration
+        // This approach works better for partial words
+        
+        // Check if the search term contains Cyrillic characters
+        const macedonianCyrillicChars = 'абвгдѓежзѕијклљмнњопрстќуфхцчџш';
+        const hasCyrillic = searchTerm.split('').some(char => macedonianCyrillicChars.includes(char));
+        
+        if (hasCyrillic) {
+            // Convert Cyrillic search term to Latin to match against potential Latin text
+            let latinSearchTerm = '';
+            for (let i = 0; i < searchTerm.length; i++) {
+                const char = searchTerm[i];
+                latinSearchTerm += {
+                    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ѓ': 'gj', 'е': 'e',
+                    'ж': 'zh', 'з': 'z', 'ѕ': 'dz', 'и': 'i', 'ј': 'j', 'к': 'k', 'л': 'l',
+                    'љ': 'lj', 'м': 'm', 'н': 'n', 'њ': 'nj', 'о': 'o', 'п': 'p', 'р': 'r',
+                    'с': 's', 'т': 't', 'ќ': 'kj', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c',
+                    'ч': 'ch', 'џ': 'dzh', 'ш': 'sh'
+                }[char] || char;
+            }
+            
+            // Convert the company name to Latin for comparison (if it contains Cyrillic)
+            if (originalText.split('').some(char => macedonianCyrillicChars.includes(char))) {
+                let latinText = '';
+                for (let i = 0; i < originalText.length; i++) {
+                    const char = originalText[i];
+                    latinText += {
+                        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ѓ': 'gj', 'е': 'e',
+                        'ж': 'zh', 'з': 'z', 'ѕ': 'dz', 'и': 'i', 'ј': 'j', 'к': 'k', 'л': 'l',
+                        'љ': 'lj', 'м': 'm', 'н': 'n', 'њ': 'nj', 'о': 'o', 'п': 'p', 'р': 'r',
+                        'с': 's', 'т': 't', 'ќ': 'kj', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c',
+                        'ч': 'ch', 'џ': 'dzh', 'ш': 'sh'
+                    }[char] || char;
+                }
+                
+                if (latinText.indexOf(latinSearchTerm) > -1) {
+                    return data;
+                }
+            }
+        } else {
+            // Latin search term - try to match against Cyrillic text
+            // Convert the company name from Cyrillic to Latin for comparison
+            if (originalText.split('').some(char => macedonianCyrillicChars.includes(char))) {
+                let latinText = '';
+                for (let i = 0; i < originalText.length; i++) {
+                    const char = originalText[i];
+                    latinText += {
+                        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ѓ': 'gj', 'е': 'e',
+                        'ж': 'zh', 'з': 'z', 'ѕ': 'dz', 'и': 'i', 'ј': 'j', 'к': 'k', 'л': 'l',
+                        'љ': 'lj', 'м': 'm', 'н': 'n', 'њ': 'nj', 'о': 'o', 'п': 'p', 'р': 'r',
+                        'с': 's', 'т': 't', 'ќ': 'kj', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c',
+                        'ч': 'ch', 'џ': 'dzh', 'ш': 'sh'
+                    }[char] || char;
+                }
+                
+                if (latinText.indexOf(searchTerm) > -1) {
+                    return data;
+                }
+            }
+            
+            // Also try to convert the search term to Cyrillic for matching
+            // This is a simple character-by-character conversion for single letters only
+            let cyrillicSearchTerm = '';
+            for (let i = 0; i < searchTerm.length; i++) {
+                const char = searchTerm[i];
+                cyrillicSearchTerm += {
+                    'a': 'а', 'b': 'б', 'v': 'в', 'g': 'г', 'd': 'д', 'e': 'е',
+                    'z': 'з', 'i': 'и', 'j': 'ј', 'k': 'к', 'l': 'л', 'm': 'м', 
+                    'n': 'н', 'o': 'о', 'p': 'п', 'r': 'р', 's': 'с', 't': 'т',
+                    'u': 'у', 'f': 'ф', 'h': 'х', 'c': 'ц'
+                }[char] || char;
+            }
+            
+            if (originalText.indexOf(cyrillicSearchTerm) > -1) {
+                return data;
+            }
+        }
+        
+        // No match found
+        return null;
+    }
+});
+                    // // Re-initialize Select2
+                    // $('#company_id').select2('destroy').select2({
+                    //     placeholder: 'Изберете компанија',
+                    //     allowClear: true,
+                    //     width: '100%',
+                    //     dropdownParent: $('body')
+                    // });
                     
                     // Restore selection if possible
                     if (currentSelection) {
