@@ -121,308 +121,396 @@
         </div>
 
         <div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-semibold">Анализа на вратен леб за периодот</h2>
-        
-        <!-- View toggle controls -->
-        <div class="flex space-x-2">
-            <button onclick="toggleReturnView('companies')" id="companiesViewBtn" 
-                class="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200">
-                По компании
-            </button>
-            <button onclick="toggleReturnView('breadtypes')" id="breadtypesViewBtn"
-                class="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200">
-                По видови леб
-            </button>
-        </div>
-    </div>
-
-    @php
-        // Group returned bread transactions by company (aggregate all dates)
-        $companiesWithReturns = [];
-        $breadTypesWithReturns = [];
-        $totalReturnedQuantity = 0;
-        $totalReturnLoss = 0;
-
-        foreach($returnedBreadTransactions as $transaction) {
-            $companyId = $transaction->company_id;
-            $breadTypeId = $transaction->bread_type_id;
-            $companyName = $transaction->company->name;
-            $breadTypeName = $transaction->breadType->name;
-            $returned = $transaction->returned;
-            $delivered = $transaction->delivered;
-            
-            $priceData = $transaction->breadType->getPriceForCompany($transaction->company_id, $transaction->transaction_date);
-            $price = $priceData['price'];
-            $returnLoss = $returned * $price;
-            
-            // Group by company
-            if (!isset($companiesWithReturns[$companyId])) {
-                $companiesWithReturns[$companyId] = [
-                    'name' => $companyName,
-                    'type' => $transaction->company->type,
-                    'total_delivered' => 0,
-                    'total_returned' => 0,
-                    'total_loss' => 0,
-                    'bread_types' => []
-                ];
-            }
-            
-            $companiesWithReturns[$companyId]['total_delivered'] += $delivered;
-            $companiesWithReturns[$companyId]['total_returned'] += $returned;
-            $companiesWithReturns[$companyId]['total_loss'] += $returnLoss;
-            
-            // Track bread types per company
-            if (!isset($companiesWithReturns[$companyId]['bread_types'][$breadTypeId])) {
-                $companiesWithReturns[$companyId]['bread_types'][$breadTypeId] = [
-                    'name' => $breadTypeName,
-                    'delivered' => 0,
-                    'returned' => 0,
-                    'loss' => 0
-                ];
-            }
-            
-            $companiesWithReturns[$companyId]['bread_types'][$breadTypeId]['delivered'] += $delivered;
-            $companiesWithReturns[$companyId]['bread_types'][$breadTypeId]['returned'] += $returned;
-            $companiesWithReturns[$companyId]['bread_types'][$breadTypeId]['loss'] += $returnLoss;
-            
-            // Group by bread type
-            if (!isset($breadTypesWithReturns[$breadTypeId])) {
-                $breadTypesWithReturns[$breadTypeId] = [
-                    'name' => $breadTypeName,
-                    'total_delivered' => 0,
-                    'total_returned' => 0,
-                    'total_loss' => 0,
-                    'companies' => []
-                ];
-            }
-            
-            $breadTypesWithReturns[$breadTypeId]['total_delivered'] += $delivered;
-            $breadTypesWithReturns[$breadTypeId]['total_returned'] += $returned;
-            $breadTypesWithReturns[$breadTypeId]['total_loss'] += $returnLoss;
-            
-            // Track companies per bread type
-            if (!isset($breadTypesWithReturns[$breadTypeId]['companies'][$companyId])) {
-                $breadTypesWithReturns[$breadTypeId]['companies'][$companyId] = [
-                    'name' => $companyName,
-                    'type' => $transaction->company->type,
-                    'delivered' => 0,
-                    'returned' => 0,
-                    'loss' => 0
-                ];
-            }
-            
-            $breadTypesWithReturns[$breadTypeId]['companies'][$companyId]['delivered'] += $delivered;
-            $breadTypesWithReturns[$breadTypeId]['companies'][$companyId]['returned'] += $returned;
-            $breadTypesWithReturns[$breadTypeId]['companies'][$companyId]['loss'] += $returnLoss;
-            
-            $totalReturnedQuantity += $returned;
-            $totalReturnLoss += $returnLoss;
-        }
-
-        // Sort companies by total returned (descending)
-        uasort($companiesWithReturns, function($a, $b) {
-            return $b['total_returned'] <=> $a['total_returned'];
-        });
-
-        // Sort bread types by total returned (descending)
-        uasort($breadTypesWithReturns, function($a, $b) {
-            return $b['total_returned'] <=> $a['total_returned'];
-        });
-    @endphp
-
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h4 class="text-red-800 font-semibold mb-2">Вкупно вратен леб</h4>
-            <p class="text-2xl font-bold text-red-600">{{ number_format($totalReturnedQuantity) }}</p>
-        </div>
-        
-        <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <h4 class="text-orange-800 font-semibold mb-2">Компании со поврат</h4>
-            <p class="text-2xl font-bold text-orange-600">{{ count($companiesWithReturns) }}</p>
-        </div>
-        
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h4 class="text-yellow-800 font-semibold mb-2">Видови леб со поврат</h4>
-            <p class="text-2xl font-bold text-yellow-600">{{ count($breadTypesWithReturns) }}</p>
-        </div>
-
-        <div class="bg-red-100 border border-red-300 rounded-lg p-4">
-            <h4 class="text-red-800 font-semibold mb-2">Вкупна загуба од поврат</h4>
-            <p class="text-2xl font-bold text-red-700">{{ number_format($totalReturnLoss, 2) }} ден.</p>
-        </div>
-    </div>
-
-    <!-- Companies View -->
-    <div id="companiesView" class="space-y-4">
-        <h3 class="text-lg font-semibold text-gray-800">Поврат по компании (вкупно за периодот)</h3>
-        
-        @forelse($companiesWithReturns as $companyId => $companyData)
-            @php
-                $returnPercentage = $companyData['total_delivered'] > 0 ? 
-                    ($companyData['total_returned'] / $companyData['total_delivered']) * 100 : 0;
-            @endphp
-            
-            <div class="bg-white shadow-md rounded-lg overflow-hidden border-l-4 
-                {{ $returnPercentage > 20 ? 'border-red-500' : ($returnPercentage > 10 ? 'border-yellow-500' : 'border-gray-300') }}">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Анализа на вратен леб за периодот</h2>
                 
-                <!-- Company Header -->
-                <div class="bg-gray-50 px-6 py-4">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <h4 class="text-xl font-semibold">{{ $companyData['name'] }}</h4>
-                            <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full 
-                                {{ $companyData['type'] === 'cash' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800' }}">
-                                {{ $companyData['type'] === 'cash' ? 'Кеш' : 'Фактура' }}
+                <!-- View toggle controls -->
+                <div class="flex space-x-2">
+                    <button onclick="toggleReturnView('companies')" id="companiesViewBtn" 
+                        class="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200">
+                        По компании
+                    </button>
+                    <button onclick="toggleReturnView('breadtypes')" id="breadtypesViewBtn"
+                        class="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200">
+                        По видови леб
+                    </button>
+                </div>
+            </div>
+
+            <!-- Page Size Selector -->
+            <div class="mb-4 flex justify-between items-center">
+                <form method="GET" class="inline-flex items-center space-x-2">
+                    <!-- Preserve all current parameters -->
+                    <input type="hidden" name="start_date" value="{{ $startDate }}">
+                    <input type="hidden" name="end_date" value="{{ $endDate }}">
+                    @if($selectedUserId)<input type="hidden" name="user_id" value="{{ $selectedUserId }}">@endif
+                    
+                    <label class="text-sm text-gray-600">Прикажи:</label>
+                    <select name="per_page" onchange="this.form.submit()" class="text-sm border rounded px-2 py-1">
+                        <option value="50" {{ request('per_page', 100) == 50 ? 'selected' : '' }}>50</option>
+                        <option value="100" {{ request('per_page', 100) == 100 ? 'selected' : '' }}>100</option>
+                        <option value="200" {{ request('per_page', 100) == 200 ? 'selected' : '' }}>200</option>
+                        <option value="500" {{ request('per_page', 100) == 500 ? 'selected' : '' }}>500</option>
+                    </select>
+                    <label class="text-sm text-gray-600">транзакции по страна</label>
+                </form>
+
+                <div class="text-sm text-gray-600">
+                    Вкупно {{ $returnedBreadTransactions->total() }} транзакции со враќања
+                </div>
+            </div>
+
+            @php
+                // Group returned bread transactions by company (aggregate all dates)
+                $companiesWithReturns = [];
+                $breadTypesWithReturns = [];
+                $totalReturnedQuantity = 0;
+                $totalReturnLoss = 0;
+
+                foreach($returnedBreadTransactions as $transaction) {
+                    $companyId = $transaction->company_id;
+                    $breadTypeId = $transaction->bread_type_id;
+                    $companyName = $transaction->company->name;
+                    $breadTypeName = $transaction->breadType->name;
+                    $returned = $transaction->returned;
+                    $delivered = $transaction->delivered;
+                    
+                    $priceData = $transaction->breadType->getPriceForCompany($transaction->company_id, $transaction->transaction_date);
+                    $price = $priceData['price'];
+                    $returnLoss = $returned * $price;
+                    
+                    // Group by company
+                    if (!isset($companiesWithReturns[$companyId])) {
+                        $companiesWithReturns[$companyId] = [
+                            'name' => $companyName,
+                            'type' => $transaction->company->type,
+                            'total_delivered' => 0,
+                            'total_returned' => 0,
+                            'total_loss' => 0,
+                            'bread_types' => []
+                        ];
+                    }
+                    
+                    $companiesWithReturns[$companyId]['total_delivered'] += $delivered;
+                    $companiesWithReturns[$companyId]['total_returned'] += $returned;
+                    $companiesWithReturns[$companyId]['total_loss'] += $returnLoss;
+                    
+                    // Track bread types per company
+                    if (!isset($companiesWithReturns[$companyId]['bread_types'][$breadTypeId])) {
+                        $companiesWithReturns[$companyId]['bread_types'][$breadTypeId] = [
+                            'name' => $breadTypeName,
+                            'delivered' => 0,
+                            'returned' => 0,
+                            'loss' => 0
+                        ];
+                    }
+                    
+                    $companiesWithReturns[$companyId]['bread_types'][$breadTypeId]['delivered'] += $delivered;
+                    $companiesWithReturns[$companyId]['bread_types'][$breadTypeId]['returned'] += $returned;
+                    $companiesWithReturns[$companyId]['bread_types'][$breadTypeId]['loss'] += $returnLoss;
+                    
+                    // Group by bread type
+                    if (!isset($breadTypesWithReturns[$breadTypeId])) {
+                        $breadTypesWithReturns[$breadTypeId] = [
+                            'name' => $breadTypeName,
+                            'total_delivered' => 0,
+                            'total_returned' => 0,
+                            'total_loss' => 0,
+                            'companies' => []
+                        ];
+                    }
+                    
+                    $breadTypesWithReturns[$breadTypeId]['total_delivered'] += $delivered;
+                    $breadTypesWithReturns[$breadTypeId]['total_returned'] += $returned;
+                    $breadTypesWithReturns[$breadTypeId]['total_loss'] += $returnLoss;
+                    
+                    // Track companies per bread type
+                    if (!isset($breadTypesWithReturns[$breadTypeId]['companies'][$companyId])) {
+                        $breadTypesWithReturns[$breadTypeId]['companies'][$companyId] = [
+                            'name' => $companyName,
+                            'type' => $transaction->company->type,
+                            'delivered' => 0,
+                            'returned' => 0,
+                            'loss' => 0
+                        ];
+                    }
+                    
+                    $breadTypesWithReturns[$breadTypeId]['companies'][$companyId]['delivered'] += $delivered;
+                    $breadTypesWithReturns[$breadTypeId]['companies'][$companyId]['returned'] += $returned;
+                    $breadTypesWithReturns[$breadTypeId]['companies'][$companyId]['loss'] += $returnLoss;
+                    
+                    $totalReturnedQuantity += $returned;
+                    $totalReturnLoss += $returnLoss;
+                }
+
+                // Sort companies by total returned (descending)
+                uasort($companiesWithReturns, function($a, $b) {
+                    return $b['total_returned'] <=> $a['total_returned'];
+                });
+
+                // Sort bread types by total returned (descending)
+                uasort($breadTypesWithReturns, function($a, $b) {
+                    return $b['total_returned'] <=> $a['total_returned'];
+                });
+            @endphp
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h4 class="text-red-800 font-semibold mb-2">Вратен леб (оваа страна)</h4>
+                    <p class="text-2xl font-bold text-red-600">{{ number_format($totalReturnedQuantity) }}</p>
+                </div>
+                
+                <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <h4 class="text-orange-800 font-semibold mb-2">Компании (оваа страна)</h4>
+                    <p class="text-2xl font-bold text-orange-600">{{ count($companiesWithReturns) }}</p>
+                </div>
+                
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 class="text-yellow-800 font-semibold mb-2">Видови леб (оваа страна)</h4>
+                    <p class="text-2xl font-bold text-yellow-600">{{ count($breadTypesWithReturns) }}</p>
+                </div>
+
+                <div class="bg-red-100 border border-red-300 rounded-lg p-4">
+                    <h4 class="text-red-800 font-semibold mb-2">Загуба (оваа страна)</h4>
+                    <p class="text-2xl font-bold text-red-700">{{ number_format($totalReturnLoss, 2) }} ден.</p>
+                </div>
+            </div>
+
+            <!-- Companies View -->
+            <div id="companiesView" class="space-y-4">
+                <h3 class="text-lg font-semibold text-gray-800">Поврат по компании (страна {{ $returnedBreadTransactions->currentPage() }})</h3>
+                
+                @forelse($companiesWithReturns as $companyId => $companyData)
+                    @php
+                        $returnPercentage = $companyData['total_delivered'] > 0 ? 
+                            ($companyData['total_returned'] / $companyData['total_delivered']) * 100 : 0;
+                    @endphp
+                    
+                    <div class="bg-white shadow-md rounded-lg overflow-hidden border-l-4 
+                        {{ $returnPercentage > 20 ? 'border-red-500' : ($returnPercentage > 10 ? 'border-yellow-500' : 'border-gray-300') }}">
+                        
+                        <!-- Company Header -->
+                        <div class="bg-gray-50 px-6 py-4">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h4 class="text-xl font-semibold">{{ $companyData['name'] }}</h4>
+                                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full 
+                                        {{ $companyData['type'] === 'cash' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800' }}">
+                                        {{ $companyData['type'] === 'cash' ? 'Кеш' : 'Фактура' }}
+                                    </span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm text-gray-600">Испорачано: {{ number_format($companyData['total_delivered']) }}</div>
+                                    <div class="text-lg font-bold text-red-600">
+                                        Поврат: {{ number_format($companyData['total_returned']) }}
+                                        <span class="text-sm">({{ number_format($returnPercentage, 1) }}%)</span>
+                                    </div>
+                                    <div class="text-sm text-red-600 font-semibold">
+                                        Загуба од поврат: {{ number_format($companyData['total_loss'], 2) }} ден.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bread Types for this Company -->
+                        <div class="px-6 py-4">
+                            <table class="w-full table-auto">
+                                <thead>
+                                    <tr class="text-left text-sm text-gray-600">
+                                        <th class="pb-2">Вид на леб</th>
+                                        <th class="pb-2 text-center">Испорачано</th>
+                                        <th class="pb-2 text-center">Поврат</th>
+                                        <th class="pb-2 text-center">Поврат во %</th>
+                                        <th class="pb-2 text-right">Загуба</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($companyData['bread_types'] as $breadTypeData)
+                                        @php
+                                            $breadReturnPercentage = $breadTypeData['delivered'] > 0 ? 
+                                                ($breadTypeData['returned'] / $breadTypeData['delivered']) * 100 : 0;
+                                        @endphp
+                                        <tr class="border-t border-gray-100">
+                                            <td class="py-2 font-medium">{{ $breadTypeData['name'] }}</td>
+                                            <td class="py-2 text-center">{{ number_format($breadTypeData['delivered']) }}</td>
+                                            <td class="py-2 text-center">
+                                                <span class="font-semibold text-red-600">{{ number_format($breadTypeData['returned']) }}</span>
+                                            </td>
+                                            <td class="py-2 text-center">
+                                                <span class="text-sm {{ $breadReturnPercentage > 20 ? 'text-red-600 font-bold' : ($breadReturnPercentage > 10 ? 'text-yellow-600 font-semibold' : 'text-gray-600') }}">
+                                                    {{ number_format($breadReturnPercentage, 1) }}%
+                                                </span>
+                                            </td>
+                                            <td class="py-2 text-right">
+                                                <span class="font-semibold text-red-600">{{ number_format($breadTypeData['loss'], 2) }}</span>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                @empty
+                    <div class="bg-white shadow-md rounded-lg p-6 text-center text-gray-500">
+                        Нема компании со вратен леб на оваа страна
+                    </div>
+                @endforelse
+            </div>
+
+            <!-- Bread Types View -->
+            <div id="breadtypesView" class="hidden space-y-4">
+                <h3 class="text-lg font-semibold text-gray-800">Поврат по видови леб (страна {{ $returnedBreadTransactions->currentPage() }})</h3>
+                
+                @forelse($breadTypesWithReturns as $breadTypeId => $breadTypeData)
+                    @php
+                        $returnPercentage = $breadTypeData['total_delivered'] > 0 ? 
+                            ($breadTypeData['total_returned'] / $breadTypeData['total_delivered']) * 100 : 0;
+                    @endphp
+                    
+                    <div class="bg-white shadow-md rounded-lg overflow-hidden border-l-4 
+                        {{ $returnPercentage > 20 ? 'border-red-500' : ($returnPercentage > 10 ? 'border-yellow-500' : 'border-gray-300') }}">
+                        
+                        <!-- Bread Type Header -->
+                        <div class="bg-gray-50 px-6 py-4">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h4 class="text-xl font-semibold">{{ $breadTypeData['name'] }}</h4>
+                                    <div class="text-sm text-gray-600 mt-1">
+                                        Поврат од {{ count($breadTypeData['companies']) }} 
+                                        {{ count($breadTypeData['companies']) == 1 ? 'компанија' : 'компании' }}
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm text-gray-600">Испорачано: {{ number_format($breadTypeData['total_delivered']) }}</div>
+                                    <div class="text-lg font-bold text-red-600">
+                                        Поврат: {{ number_format($breadTypeData['total_returned']) }}
+                                        <span class="text-sm">({{ number_format($returnPercentage, 1) }}%)</span>
+                                    </div>
+                                    <div class="text-sm text-red-600 font-semibold">
+                                        Загуба од поврат: {{ number_format($breadTypeData['total_loss'], 2) }} ден.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Companies for this Bread Type -->
+                        <div class="px-6 py-4">
+                            <table class="w-full table-auto">
+                                <thead>
+                                    <tr class="text-left text-sm text-gray-600">
+                                        <th class="pb-2">Компанија</th>
+                                        <th class="pb-2 text-center">Тип</th>
+                                        <th class="pb-2 text-center">Испорачано</th>
+                                        <th class="pb-2 text-center">Поврат</th>
+                                        <th class="pb-2 text-center">Поврат во %</th>
+                                        <th class="pb-2 text-right">Загуба</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($breadTypeData['companies'] as $companyData)
+                                        @php
+                                            $companyReturnPercentage = $companyData['delivered'] > 0 ? 
+                                                ($companyData['returned'] / $companyData['delivered']) * 100 : 0;
+                                        @endphp
+                                        <tr class="border-t border-gray-100">
+                                            <td class="py-2 font-medium">{{ $companyData['name'] }}</td>
+                                            <td class="py-2 text-center">
+                                                <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full 
+                                                    {{ $companyData['type'] === 'cash' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800' }}">
+                                                    {{ $companyData['type'] === 'cash' ? 'Кеш' : 'Фактура' }}
+                                                </span>
+                                            </td>
+                                            <td class="py-2 text-center">{{ number_format($companyData['delivered']) }}</td>
+                                            <td class="py-2 text-center">
+                                                <span class="font-semibold text-red-600">{{ number_format($companyData['returned']) }}</span>
+                                            </td>
+                                            <td class="py-2 text-center">
+                                                <span class="text-sm {{ $companyReturnPercentage > 20 ? 'text-red-600 font-bold' : ($companyReturnPercentage > 10 ? 'text-yellow-600 font-semibold' : 'text-gray-600') }}">
+                                                    {{ number_format($companyReturnPercentage, 1) }}%
+                                                </span>
+                                            </td>
+                                            <td class="py-2 text-right">
+                                                <span class="font-semibold text-red-600">{{ number_format($companyData['loss'], 2) }}</span>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                @empty
+                    <div class="bg-white shadow-md rounded-lg p-6 text-center text-gray-500">
+                        Нема видови леб со враќања на оваа страна
+                    </div>
+                @endforelse
+            </div>
+
+            <!-- PAGINATION CONTROLS -->
+            <div class="mt-6 flex justify-between items-center">
+                <div class="text-sm text-gray-600">
+                    Прикажани се {{ $returnedBreadTransactions->firstItem() ?? 0 }} до {{ $returnedBreadTransactions->lastItem() ?? 0 }} 
+                    од {{ $returnedBreadTransactions->total() }} транзакции со враќања
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    {{-- Previous Page Link --}}
+                    @if ($returnedBreadTransactions->onFirstPage())
+                        <span class="px-3 py-2 text-sm text-gray-400 bg-gray-200 rounded cursor-not-allowed">
+                            « Претходна
+                        </span>
+                    @else
+                        <a href="{{ $returnedBreadTransactions->appends(request()->query())->previousPageUrl() }}" 
+                           class="px-3 py-2 text-sm text-blue-600 bg-blue-100 rounded hover:bg-blue-200">
+                            « Претходна
+                        </a>
+                    @endif
+
+                    {{-- Page Numbers --}}
+                    @php
+                        $start = max(1, $returnedBreadTransactions->currentPage() - 2);
+                        $end = min($returnedBreadTransactions->lastPage(), $returnedBreadTransactions->currentPage() + 2);
+                    @endphp
+
+                    @for ($i = $start; $i <= $end; $i++)
+                        @if ($i == $returnedBreadTransactions->currentPage())
+                            <span class="px-3 py-2 text-sm text-white bg-blue-600 rounded">
+                                {{ $i }}
                             </span>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-sm text-gray-600">Испорачано: {{ number_format($companyData['total_delivered']) }}</div>
-                            <div class="text-lg font-bold text-red-600">
-                                Поврат: {{ number_format($companyData['total_returned']) }}
-                                <span class="text-sm">({{ number_format($returnPercentage, 1) }}%)</span>
-                            </div>
-                            <div class="text-sm text-red-600 font-semibold">
-                                Загуба од поврат: {{ number_format($companyData['total_loss'], 2) }} ден.
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                        @else
+                            <a href="{{ $returnedBreadTransactions->appends(request()->query())->url($i) }}" 
+                               class="px-3 py-2 text-sm text-blue-600 bg-blue-100 rounded hover:bg-blue-200">
+                                {{ $i }}
+                            </a>
+                        @endif
+                    @endfor
 
-                <!-- Bread Types for this Company -->
-                <div class="px-6 py-4">
-                    <table class="w-full table-auto">
-                        <thead>
-                            <tr class="text-left text-sm text-gray-600">
-                                <th class="pb-2">Вид на леб</th>
-                                <th class="pb-2 text-center">Испорачано</th>
-                                <th class="pb-2 text-center">Поврат</th>
-                                <th class="pb-2 text-center">Поврат во %</th>
-                                <th class="pb-2 text-right">Загуба</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($companyData['bread_types'] as $breadTypeData)
-                                @php
-                                    $breadReturnPercentage = $breadTypeData['delivered'] > 0 ? 
-                                        ($breadTypeData['returned'] / $breadTypeData['delivered']) * 100 : 0;
-                                @endphp
-                                <tr class="border-t border-gray-100">
-                                    <td class="py-2 font-medium">{{ $breadTypeData['name'] }}</td>
-                                    <td class="py-2 text-center">{{ number_format($breadTypeData['delivered']) }}</td>
-                                    <td class="py-2 text-center">
-                                        <span class="font-semibold text-red-600">{{ number_format($breadTypeData['returned']) }}</span>
-                                    </td>
-                                    <td class="py-2 text-center">
-                                        <span class="text-sm {{ $breadReturnPercentage > 20 ? 'text-red-600 font-bold' : ($breadReturnPercentage > 10 ? 'text-yellow-600 font-semibold' : 'text-gray-600') }}">
-                                            {{ number_format($breadReturnPercentage, 1) }}%
-                                        </span>
-                                    </td>
-                                    <td class="py-2 text-right">
-                                        <span class="font-semibold text-red-600">{{ number_format($breadTypeData['loss'], 2) }}</span>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                    {{-- Next Page Link --}}
+                    @if ($returnedBreadTransactions->hasMorePages())
+                        <a href="{{ $returnedBreadTransactions->appends(request()->query())->nextPageUrl() }}" 
+                           class="px-3 py-2 text-sm text-blue-600 bg-blue-100 rounded hover:bg-blue-200">
+                            Следна »
+                        </a>
+                    @else
+                        <span class="px-3 py-2 text-sm text-gray-400 bg-gray-200 rounded cursor-not-allowed">
+                            Следна »
+                        </span>
+                    @endif
                 </div>
             </div>
-        @empty
-            <div class="bg-white shadow-md rounded-lg p-6 text-center text-gray-500">
-                Нема компании со вратен леб за овој период
-            </div>
-        @endforelse
-    </div>
 
-    <!-- Bread Types View -->
-    <div id="breadtypesView" class="hidden space-y-4">
-        <h3 class="text-lg font-semibold text-gray-800">Поврат по видови леб (вкупно за периодот)</h3>
-        
-        @forelse($breadTypesWithReturns as $breadTypeId => $breadTypeData)
-            @php
-                $returnPercentage = $breadTypeData['total_delivered'] > 0 ? 
-                    ($breadTypeData['total_returned'] / $breadTypeData['total_delivered']) * 100 : 0;
-            @endphp
-            
-            <div class="bg-white shadow-md rounded-lg overflow-hidden border-l-4 
-                {{ $returnPercentage > 20 ? 'border-red-500' : ($returnPercentage > 10 ? 'border-yellow-500' : 'border-gray-300') }}">
-                
-                <!-- Bread Type Header -->
-                <div class="bg-gray-50 px-6 py-4">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <h4 class="text-xl font-semibold">{{ $breadTypeData['name'] }}</h4>
-                            <div class="text-sm text-gray-600 mt-1">
-                                Поврат од {{ count($breadTypeData['companies']) }} 
-                                {{ count($breadTypeData['companies']) == 1 ? 'компанија' : 'компании' }}
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-sm text-gray-600">Испорачано: {{ number_format($breadTypeData['total_delivered']) }}</div>
-                            <div class="text-lg font-bold text-red-600">
-                                Поврат: {{ number_format($breadTypeData['total_returned']) }}
-                                <span class="text-sm">({{ number_format($returnPercentage, 1) }}%)</span>
-                            </div>
-                            <div class="text-sm text-red-600 font-semibold">
-                                Загуба од поврат: {{ number_format($breadTypeData['total_loss'], 2) }} ден.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Companies for this Bread Type -->
-                <div class="px-6 py-4">
-                    <table class="w-full table-auto">
-                        <thead>
-                            <tr class="text-left text-sm text-gray-600">
-                                <th class="pb-2">Компанија</th>
-                                <th class="pb-2 text-center">Тип</th>
-                                <th class="pb-2 text-center">Испорачано</th>
-                                <th class="pb-2 text-center">Поврат</th>
-                                <th class="pb-2 text-center">Поврат во %</th>
-                                <th class="pb-2 text-right">Загуба</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($breadTypeData['companies'] as $companyData)
-                                @php
-                                    $companyReturnPercentage = $companyData['delivered'] > 0 ? 
-                                        ($companyData['returned'] / $companyData['delivered']) * 100 : 0;
-                                @endphp
-                                <tr class="border-t border-gray-100">
-                                    <td class="py-2 font-medium">{{ $companyData['name'] }}</td>
-                                    <td class="py-2 text-center">
-                                        <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full 
-                                            {{ $companyData['type'] === 'cash' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800' }}">
-                                            {{ $companyData['type'] === 'cash' ? 'Кеш' : 'Фактура' }}
-                                        </span>
-                                    </td>
-                                    <td class="py-2 text-center">{{ number_format($companyData['delivered']) }}</td>
-                                    <td class="py-2 text-center">
-                                        <span class="font-semibold text-red-600">{{ number_format($companyData['returned']) }}</span>
-                                    </td>
-                                    <td class="py-2 text-center">
-                                        <span class="text-sm {{ $companyReturnPercentage > 20 ? 'text-red-600 font-bold' : ($companyReturnPercentage > 10 ? 'text-yellow-600 font-semibold' : 'text-gray-600') }}">
-                                            {{ number_format($companyReturnPercentage, 1) }}%
-                                        </span>
-                                    </td>
-                                    <td class="py-2 text-right">
-                                        <span class="font-semibold text-red-600">{{ number_format($companyData['loss'], 2) }}</span>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+            <!-- Summary for current page -->
+            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-blue-800">
+                        <strong>Страна {{ $returnedBreadTransactions->currentPage() }} од {{ $returnedBreadTransactions->lastPage() }}</strong>
+                    </span>
+                    <span class="text-blue-600">
+                        Вкупно {{ $returnedBreadTransactions->total() }} транзакции со враќања за овој период
+                    </span>
                 </div>
             </div>
-        @empty
-            <div class="bg-white shadow-md rounded-lg p-6 text-center text-gray-500">
-                Нема видови леб со враќања за овој период
-            </div>
-        @endforelse
-    </div>
-</div>
+        </div>
 
         <!-- Company Tables -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
