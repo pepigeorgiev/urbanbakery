@@ -1526,6 +1526,187 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
         ->orderBy('bread_type_id')
         ->get();
 }
+
+
+/**
+ * Get comprehensive company performance data for date range
+ */
+private function getCompanyPerformanceAnalysis($startDate, $endDate, $companyIds, $selectedUserId)
+{
+    // Get all transactions (both sales and returns) for the period
+    $allTransactions = DailyTransaction::with(['breadType', 'company'])
+        ->whereNotNull('bread_type_id')
+        ->whereHas('breadType')
+        ->whereBetween('transaction_date', [$startDate, $endDate])
+        ->whereIn('company_id', $companyIds)
+        ->get();
+
+    // Apply user filter if selected
+    if ($selectedUserId) {
+        $selectedUser = User::find($selectedUserId);
+        if ($selectedUser) {
+            $allTransactions = $allTransactions->whereIn('company_id', $selectedUser->companies->pluck('id'));
+        }
+    }
+
+    $companyPerformance = [];
+    
+    foreach ($allTransactions->groupBy('company_id') as $companyId => $transactions) {
+        $company = Company::find($companyId);
+        if (!$company) continue;
+        
+        $totalDelivered = 0;
+        $totalReturned = 0;
+        $totalSalesAmount = 0;
+        $totalReturnLoss = 0;
+        $totalGratis = 0;
+        $breadTypeBreakdown = [];
+        
+        foreach ($transactions as $transaction) {
+            if (!$transaction->breadType) continue;
+            
+            $delivered = $transaction->delivered;
+            $returned = $transaction->returned;
+            $gratis = $transaction->gratis ?? 0;
+            $netSold = $delivered - $returned - $gratis;
+            
+            // Get price for this transaction
+            $priceData = $transaction->breadType->getPriceForCompany($companyId, $transaction->transaction_date);
+            $price = $priceData['price'];
+            
+            $salesAmount = $netSold * $price;
+            $returnLoss = $returned * $price;
+            
+            // Only count paid transactions for cash companies
+            $shouldCount = true;
+            if ($company->type === 'cash' && !$transaction->is_paid) {
+                $shouldCount = false;
+            }
+            
+            if ($shouldCount && $netSold > 0) {
+                $totalSalesAmount += $salesAmount;
+            }
+            
+            $totalDelivered += $delivered;
+            $totalReturned += $returned;
+            $totalReturnLoss += $returnLoss;
+            $totalGratis += $gratis;
+            
+            // Track bread type breakdown
+            $breadTypeName = $transaction->breadType->name;
+            if (!isset($breadTypeBreakdown[$breadTypeName])) {
+                $breadTypeBreakdown[$breadTypeName] = [
+                    'delivered' => 0,
+                    'returned' => 0,
+                    'gratis' => 0,
+                    'net_sold' => 0,
+                    'sales_amount' => 0,
+                    'return_loss' => 0
+                ];
+            }
+            
+            $breadTypeBreakdown[$breadTypeName]['delivered'] += $delivered;
+            $breadTypeBreakdown[$breadTypeName]['returned'] += $returned;
+            $breadTypeBreakdown[$breadTypeName]['gratis'] += $gratis;
+            $breadTypeBreakdown[$breadTypeName]['net_sold'] += $netSold;
+            $breadTypeBreakdown[$breadTypeName]['sales_amount'] += ($shouldCount ? $salesAmount : 0);
+            $breadTypeBreakdown[$breadTypeName]['return_loss'] += $returnLoss;
+        }
+        
+        // Calculate performance metrics
+        $returnPercentage = $totalDelivered > 0 ? ($totalReturned / $totalDelivered) * 100 : 0;
+        $gratisPercentage = $totalDelivered > 0 ? ($totalGratis / $totalDelivered) * 100 : 0;
+        $netProfit = $totalSalesAmount - $totalReturnLoss;
+        $efficiency = $totalDelivered > 0 ? (($totalDelivered - $totalReturned - $totalGratis) / $totalDelivered) * 100 : 0;
+        
+        $companyPerformance[$companyId] = [
+            'company_id' => $companyId,
+            'company_name' => $company->name,
+            'company_type' => $company->type,
+            'total_delivered' => $totalDelivered,
+            'total_returned' => $totalReturned,
+            'total_gratis' => $totalGratis,
+            'net_sold' => $totalDelivered - $totalReturned - $totalGratis,
+            'total_sales_amount' => $totalSalesAmount,
+            'total_return_loss' => $totalReturnLoss,
+            'net_profit' => $netProfit,
+            'return_percentage' => $returnPercentage,
+            'gratis_percentage' => $gratisPercentage,
+            'efficiency_percentage' => $efficiency,
+            'bread_type_breakdown' => $breadTypeBreakdown,
+            'performance_score' => $this->calculatePerformanceScore($totalSalesAmount, $returnPercentage, $efficiency)
+        ];
+    }
+    
+    return $companyPerformance;
+}
+
+/**
+ * Calculate a performance score for ranking companies
+ */
+private function calculatePerformanceScore($salesAmount, $returnPercentage, $efficiency)
+{
+    // Normalize sales amount (higher is better)
+    $salesScore = min(100, ($salesAmount / 10000) * 10); // Adjust divisor based on your typical sales
+    
+    // Return percentage score (lower is better)
+    $returnScore = max(0, 100 - $returnPercentage * 2);
+    
+    // Efficiency score (higher is better)
+    $efficiencyScore = $efficiency;
+    
+    // Weighted average: 40% sales, 30% returns, 30% efficiency
+    return ($salesScore * 0.4) + ($returnScore * 0.3) + ($efficiencyScore * 0.3);
+}
+
+/**
+ * Get top and worst performing companies
+ */
+private function getTopAndWorstPerformers($companyPerformance, $limit = 10)
+{
+    // Filter out companies with no activity
+    $activeCompanies = array_filter($companyPerformance, function($company) {
+        return $company['total_delivered'] > 0;
+    });
+    
+    // Sort by performance score for best performers
+    $bestPerformers = $activeCompanies;
+    uasort($bestPerformers, function($a, $b) {
+        return $b['performance_score'] <=> $a['performance_score'];
+    });
+    $bestPerformers = array_slice($bestPerformers, 0, $limit, true);
+    
+    // Sort by return percentage for worst performers (highest returns)
+    $worstPerformers = $activeCompanies;
+    uasort($worstPerformers, function($a, $b) {
+        // Secondary sort by return loss amount if percentages are similar
+        if (abs($a['return_percentage'] - $b['return_percentage']) < 1) {
+            return $b['total_return_loss'] <=> $a['total_return_loss'];
+        }
+        return $b['return_percentage'] <=> $a['return_percentage'];
+    });
+    $worstPerformers = array_slice($worstPerformers, 0, $limit, true);
+    
+    // Sort all companies by sales amount for overview
+    $allCompaniesBySales = $activeCompanies;
+    uasort($allCompaniesBySales, function($a, $b) {
+        return $b['total_sales_amount'] <=> $a['total_sales_amount'];
+    });
+    
+    return [
+        'best_performers' => $bestPerformers,
+        'worst_performers' => $worstPerformers,
+        'all_companies' => $allCompaniesBySales,
+        'summary_stats' => [
+            'total_companies' => count($activeCompanies),
+            'total_sales' => array_sum(array_column($activeCompanies, 'total_sales_amount')),
+            'total_returns' => array_sum(array_column($activeCompanies, 'total_returned')),
+            'total_return_loss' => array_sum(array_column($activeCompanies, 'total_return_loss')),
+            'average_return_percentage' => count($activeCompanies) > 0 ? array_sum(array_column($activeCompanies, 'return_percentage')) / count($activeCompanies) : 0
+        ]
+    ];
+}
+
 /**
  * Get date range summary
  * 
@@ -1537,38 +1718,27 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
     $dateRange = $this->handleDateRangeFilter($request);
     
     if (!$dateRange) {
-        // No valid date range, redirect to normal index
         return redirect()->route('summary.index');
     }
     
     $startDate = $dateRange['start_date'];
     $endDate = $dateRange['end_date'];
-    
-    // Get current user
     $currentUser = Auth::user();
-    
-    // Get users for admin dropdown
-    $users = User::where('role', '!=', 'super_admin')
-                ->orderBy('name')
-                ->get();
-    
-    // Get selected user ID
+    $users = User::where('role', '!=', 'super_admin')->orderBy('name')->get();
     $selectedUserId = $request->get('user_id');
     
-    // Determine which companies to show
+    // Get companies
     if ($currentUser->isAdmin() || $currentUser->role === 'super_admin') {
         if ($selectedUserId) {
             $selectedUser = User::find($selectedUserId);
             $allCompanies = $selectedUser->companies;
         } else {
-            // If no user selected, show all companies
             $allCompanies = Company::all();
         }
     } else {
         $allCompanies = $currentUser->companies;
     }
     
-    // Check if companies exist
     if ($allCompanies->isEmpty()) {
         return redirect()->back()->with('error', 'Нема компанија поврзана со вашиот акаунт.');
     }
@@ -1584,16 +1754,15 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
         ->whereIn('company_id', $allCompanies->pluck('id'))
         ->get();
     
-    // GET RETURNED BREAD TRANSACTIONS FOR DATE RANGE WITH PAGINATION - THIS IS THE KEY FIX
+    // GET RETURNED BREAD TRANSACTIONS WITH PAGINATION
     $returnedBreadQuery = DailyTransaction::with(['breadType', 'company'])
         ->whereNotNull('bread_type_id')
         ->whereHas('breadType')
         ->whereDate('transaction_date', '>=', $startDate)
         ->whereDate('transaction_date', '<=', $endDate)
-        ->where('returned', '>', 0) // Only transactions with returns
+        ->where('returned', '>', 0)
         ->whereIn('company_id', $allCompanies->pluck('id'));
 
-    // Apply user filter if selected
     if ($selectedUserId) {
         $selectedUser = User::find($selectedUserId);
         if ($selectedUser) {
@@ -1601,7 +1770,6 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
         }
     }
 
-    // ADD PAGINATION HERE - THIS SOLVES THE MEMORY ISSUE
     $returnedBreadTransactions = $returnedBreadQuery->orderBy('transaction_date', 'desc')
         ->orderBy('company_id')
         ->orderBy('bread_type_id')
@@ -1656,7 +1824,6 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
         foreach ($companyTrans as $transaction) {
             if (!$transaction->breadType) continue;
             
-            // Skip unpaid cash transactions
             if ($company->type === 'cash' && !$transaction->is_paid) {
                 continue;
             }
@@ -1690,50 +1857,30 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
         }
     }
     
-    // Get bread sales within date range
-    $breadSales = BreadSale::whereDate('transaction_date', '>=', $startDate)
-        ->whereDate('transaction_date', '<=', $endDate);
-    
-    if (!$currentUser->isAdmin() && $currentUser->role !== 'super_admin') {
-        $breadSales->whereIn('company_id', $currentUser->companies->pluck('id'));
-    } elseif ($selectedUserId) {
-        $breadSales->whereIn('company_id', User::find($selectedUserId)->companies->pluck('id'));
-    }
-    
-    $breadSales = $breadSales->get();
-
+    // Get old bread data
     $oldBreadQuery = DailyTransaction::whereDate('transaction_date', '>=', $startDate)
         ->whereDate('transaction_date', '<=', $endDate)
         ->whereNotNull('old_bread_sold')
         ->where('old_bread_sold', '>', 0);
 
-    // Apply user/company filters
     if (!$currentUser->isAdmin() && $currentUser->role !== 'super_admin') {
         $oldBreadQuery->whereIn('company_id', $currentUser->companies->pluck('id'));
     } elseif ($selectedUserId) {
         $oldBreadQuery->whereIn('company_id', User::find($selectedUserId)->companies->pluck('id'));
     }
 
-    // Get the total sum of old bread sold
     $oldBreadSold = $oldBreadQuery->sum('old_bread_sold');
-
-    // Now calculate the total amount by joining with bread types
     $oldBreadItems = $oldBreadQuery->with('breadType')->get();
-
     $oldBreadTotal = 0;
 
     foreach ($oldBreadItems as $item) {
         if (!$item->breadType) continue;
-        
         $oldBreadTotal += $item->old_bread_sold * ($item->breadType->old_price ?? 0);
     }
-
-    // For debugging
-    Log::info('Old bread calculation (alternative method)', [
-        'old_bread_sold' => $oldBreadSold,
-        'old_bread_total' => $oldBreadTotal,
-        'transactions_count' => $oldBreadItems->count(),
-    ]);
+    
+    // ADD NEW COMPANY PERFORMANCE ANALYSIS
+    $companyPerformance = $this->getCompanyPerformanceAnalysis($startDate, $endDate, $allCompanies->pluck('id')->toArray(), $selectedUserId);
+    $performanceAnalysis = $this->getTopAndWorstPerformers($companyPerformance);
     
     // Prepare data for view
     $data = [
@@ -1754,7 +1901,15 @@ private function getReturnedBreadTransactions($selectedDate, $allCompanies, $sel
         'selectedUserId' => $selectedUserId,
         'allCompanies' => $allCompanies,
         'company' => $company,
-        'returnedBreadTransactions' => $returnedBreadTransactions  // NOW PAGINATED
+        'returnedBreadTransactions' => $returnedBreadTransactions,
+        
+        // NEW PERFORMANCE DATA
+        'companyPerformance' => $companyPerformance,
+        'bestPerformers' => $performanceAnalysis['best_performers'],
+        'worstPerformers' => $performanceAnalysis['worst_performers'],
+        'allCompaniesPerformance' => $performanceAnalysis['all_companies'],
+        'performanceSummary' => $performanceAnalysis['summary_stats']
+        
     ];
     
     return view('summary.date-range', $data);
