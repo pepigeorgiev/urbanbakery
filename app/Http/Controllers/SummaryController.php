@@ -1505,27 +1505,27 @@ private function handleDateRangeFilter(Request $request)
 /**
  * Get detailed returned bread transactions
  */
-private function getReturnedBreadTransactions($selectedDate, $allCompanies, $selectedUserId = null)
-{
-    $query = DailyTransaction::with(['breadType', 'company'])
-        ->whereNotNull('bread_type_id')
-        ->whereHas('breadType')
-        ->whereDate('transaction_date', $selectedDate)
-        ->where('returned', '>', 0) // Only transactions with returns
-        ->whereIn('company_id', $allCompanies->pluck('id'));
+// private function getReturnedBreadTransactions($selectedDate, $allCompanies, $selectedUserId = null)
+// {
+//     $query = DailyTransaction::with(['breadType', 'company'])
+//         ->whereNotNull('bread_type_id')
+//         ->whereHas('breadType')
+//         ->whereDate('transaction_date', $selectedDate)
+//         ->where('returned', '>', 0) // Only transactions with returns
+//         ->whereIn('company_id', $allCompanies->pluck('id'));
 
-    // If specific user is selected by admin
-    if ($selectedUserId) {
-        $selectedUser = User::find($selectedUserId);
-        if ($selectedUser) {
-            $query->whereIn('company_id', $selectedUser->companies->pluck('id'));
-        }
-    }
+//     // If specific user is selected by admin
+//     if ($selectedUserId) {
+//         $selectedUser = User::find($selectedUserId);
+//         if ($selectedUser) {
+//             $query->whereIn('company_id', $selectedUser->companies->pluck('id'));
+//         }
+//     }
 
-    return $query->orderBy('company_id')
-        ->orderBy('bread_type_id')
-        ->get();
-}
+//     return $query->orderBy('company_id')
+//         ->orderBy('bread_type_id')
+//         ->get();
+// }
 
 
 /**
