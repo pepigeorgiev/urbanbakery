@@ -1896,13 +1896,23 @@ public function dateRangeSummary(Request $request)
     if ($currentUser->isAdmin() || $currentUser->role === 'super_admin') {
         if ($selectedUserId) {
             $selectedUser = User::find($selectedUserId);
-            $allCompanies = $selectedUser->companies()->select('id', 'name', 'type')->get();
+            $allCompanies = $selectedUser->companies;  // This will get all company columns
         } else {
-            $allCompanies = Company::select('id', 'name', 'type')->get();
+            $allCompanies = Company::all();
         }
     } else {
-        $allCompanies = $currentUser->companies()->select('id', 'name', 'type')->get();
+        $allCompanies = $currentUser->companies;
     }
+    // if ($currentUser->isAdmin() || $currentUser->role === 'super_admin') {
+    //     if ($selectedUserId) {
+    //         $selectedUser = User::find($selectedUserId);
+    //         $allCompanies = $selectedUser->companies()->select('id', 'name', 'type')->get();
+    //     } else {
+    //         $allCompanies = Company::select('id', 'name', 'type')->get();
+    //     }
+    // } else {
+    //     $allCompanies = $currentUser->companies()->select('id', 'name', 'type')->get();
+    // }
     
     if ($allCompanies->isEmpty()) {
         return redirect()->back()->with('error', 'Нема компанија поврзана со вашиот акаунт.');
