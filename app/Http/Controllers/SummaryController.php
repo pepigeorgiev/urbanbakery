@@ -2130,7 +2130,7 @@ private function getBreadTypesAnalysis($startDate, $endDate, $companyIds, $selec
         ->whereNotNull('dt.bread_type_id')
         ->whereBetween('dt.transaction_date', [$startDate, $endDate])
         ->whereIn('dt.company_id', $companyIds)
-        ->where('dt.returned', '>', 0)
+        ->having('total_delivered', '>', 0) 
         ->groupBy('bt.id', 'bt.name')
         ->orderBy('total_returned', 'desc');
 
