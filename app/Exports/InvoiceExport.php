@@ -81,6 +81,7 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
             ORDER BY
                 user_id,
                 c.code,
+                c.mygpm_business_unit,
                 bt.code
         ";
 
