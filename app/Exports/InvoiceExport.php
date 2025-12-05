@@ -42,69 +42,58 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
     {
         $result = new Collection();
 
-        // Use Laravel Eloquent to get transactions with proper price calculation
-        $transactions = \App\Models\DailyTransaction::query()
-            ->whereBetween('transaction_date', [$this->startDate, $this->endDate])
-            ->whereHas('company', function($q) {
-                $q->where('type', 'invoice');
-            })
-            ->with(['company', 'breadType', 'company.users'])
-            ->get()
-            ->groupBy(function($item) {
-                // Group ONLY by company and bread type
-                return $item->company_id . '_' . $item->bread_type_id;
-            })
-            ->map(function($group) {
-                $first = $group->first();
-                $company = $first->company;
-                $breadType = $first->breadType;
+        $query = "
+            SELECT
+                c.code as company_code,
+                c.name as company_name,
+                bt.code as bread_code,
+                bt.name as bread_name,
+                SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
+                COALESCE(
+                    (SELECT btc.price
+                     FROM bread_type_company btc
+                     WHERE btc.bread_type_id = dt.bread_type_id
+                       AND btc.company_id = dt.company_id
+                       AND btc.valid_from <= MAX(dt.transaction_date)
+                     ORDER BY btc.valid_from DESC
+                     LIMIT 1),
+                    bt.price
+                ) as price,
+                c.mygpm_business_unit,
+                (SELECT cu.user_id FROM company_user cu WHERE cu.company_id = c.id LIMIT 1) as user_id
+            FROM daily_transactions dt
+            JOIN companies c ON dt.company_id = c.id
+            JOIN bread_types bt ON dt.bread_type_id = bt.id
+            WHERE c.type = 'invoice'
+              AND dt.transaction_date BETWEEN ? AND ?
+            GROUP BY
+                c.id,
+                c.code,
+                c.name,
+                bt.id,
+                bt.code,
+                bt.name,
+                dt.bread_type_id,
+                dt.company_id,
+                bt.price,
+                c.mygpm_business_unit
+            HAVING SUM(dt.delivered - dt.returned - dt.gratis) > 0
+            ORDER BY
+                user_id,
+                c.code,
+                bt.code
+        ";
 
-                // Get the latest transaction date to calculate price
-                $latestTransaction = $group->sortByDesc('transaction_date')->first();
+        // Log the query parameters
+        \Log::info('Executing export query with params:', [
+            'start_date' => $this->startDate,
+            'end_date' => $this->endDate
+        ]);
 
-                // Calculate price using the latest transaction date (most recent price)
-                $price = \App\Models\DailyTransaction::calculatePriceForBreadType(
-                    $breadType,
-                    $company,
-                    $latestTransaction->transaction_date
-                );
-
-                // Sum quantities across all transactions in the period
-                $quantity = $group->sum(function($item) {
-                    return $item->delivered - $item->returned - $item->gratis;
-                });
-
-                // Only include if quantity > 0
-                if ($quantity <= 0) {
-                    return null;
-                }
-
-                return (object)[
-                    'company_code' => $company->code,
-                    'company_name' => $company->name,
-                    'bread_code' => $breadType->code,
-                    'bread_name' => $breadType->name,
-                    'quantity' => $quantity,
-                    'price' => $price,
-                    'mygpm_business_unit' => $company->mygpm_business_unit,
-                    'user_id' => $company->users->first()->id ?? null
-                ];
-            })
-            ->filter() // Remove nulls
-            ->sort(function($a, $b) {
-                // Sort by: user_id, company_code, bread_code
-                if ($a->user_id != $b->user_id) {
-                    return ($a->user_id ?? 0) <=> ($b->user_id ?? 0);
-                }
-                if ($a->company_code != $b->company_code) {
-                    return $a->company_code <=> $b->company_code;
-                }
-                return $a->bread_code <=> $b->bread_code;
-            })
-            ->values();
+        $transactions = \DB::select($query, [$this->startDate, $this->endDate]);
 
         \Log::info('Query results:', [
-            'count' => $transactions->count(),
+            'count' => count($transactions),
             'data' => $transactions
         ]);
 
