@@ -93,11 +93,16 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
                 ];
             })
             ->filter() // Remove nulls
-            ->sortBy([
-                ['user_id', 'asc'],
-                ['company_code', 'asc'],
-                ['bread_code', 'asc']
-            ])
+            ->sort(function($a, $b) {
+                // Sort by: user_id, company_code, bread_code
+                if ($a->user_id != $b->user_id) {
+                    return ($a->user_id ?? 0) <=> ($b->user_id ?? 0);
+                }
+                if ($a->company_code != $b->company_code) {
+                    return $a->company_code <=> $b->company_code;
+                }
+                return $a->bread_code <=> $b->bread_code;
+            })
             ->values();
 
         \Log::info('Query results:', [
