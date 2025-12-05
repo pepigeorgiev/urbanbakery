@@ -43,41 +43,40 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
         $result = new Collection();
 
         $query = "
+            WITH transaction_summary AS (
+                SELECT
+                    dt.company_id,
+                    dt.bread_type_id,
+                    SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
+                    MAX(dt.transaction_date) as max_transaction_date
+                FROM daily_transactions dt
+                JOIN companies c ON dt.company_id = c.id
+                WHERE c.type = 'invoice'
+                  AND dt.transaction_date BETWEEN ? AND ?
+                GROUP BY dt.company_id, dt.bread_type_id
+                HAVING SUM(dt.delivered - dt.returned - dt.gratis) > 0
+            )
             SELECT
                 c.code as company_code,
                 c.name as company_name,
                 bt.code as bread_code,
                 bt.name as bread_name,
-                SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
+                ts.quantity,
                 COALESCE(
                     (SELECT btc.price
                      FROM bread_type_company btc
-                     WHERE btc.bread_type_id = dt.bread_type_id
-                       AND btc.company_id = dt.company_id
-                       AND btc.valid_from <= MAX(dt.transaction_date)
+                     WHERE btc.bread_type_id = ts.bread_type_id
+                       AND btc.company_id = ts.company_id
+                       AND btc.valid_from <= ts.max_transaction_date
                      ORDER BY btc.valid_from DESC
                      LIMIT 1),
                     bt.price
                 ) as price,
                 c.mygpm_business_unit,
                 (SELECT cu.user_id FROM company_user cu WHERE cu.company_id = c.id LIMIT 1) as user_id
-            FROM daily_transactions dt
-            JOIN companies c ON dt.company_id = c.id
-            JOIN bread_types bt ON dt.bread_type_id = bt.id
-            WHERE c.type = 'invoice'
-              AND dt.transaction_date BETWEEN ? AND ?
-            GROUP BY
-                c.id,
-                c.code,
-                c.name,
-                bt.id,
-                bt.code,
-                bt.name,
-                dt.bread_type_id,
-                dt.company_id,
-                bt.price,
-                c.mygpm_business_unit
-            HAVING SUM(dt.delivered - dt.returned - dt.gratis) > 0
+            FROM transaction_summary ts
+            JOIN companies c ON ts.company_id = c.id
+            JOIN bread_types bt ON ts.bread_type_id = bt.id
             ORDER BY
                 user_id,
                 c.code,
