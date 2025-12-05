@@ -51,27 +51,25 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
             ->with(['company', 'breadType', 'company.users'])
             ->get()
             ->groupBy(function($item) {
-                // Group by company, bread type, and price (calculated for transaction date)
-                $price = \App\Models\DailyTransaction::calculatePriceForBreadType(
-                    $item->breadType,
-                    $item->company,
-                    $item->transaction_date
-                );
-                return $item->company_id . '_' . $item->bread_type_id . '_' . $price;
+                // Group ONLY by company and bread type
+                return $item->company_id . '_' . $item->bread_type_id;
             })
             ->map(function($group) {
                 $first = $group->first();
                 $company = $first->company;
                 $breadType = $first->breadType;
 
-                // Calculate price using the same method as daily transactions
+                // Get the latest transaction date to calculate price
+                $latestTransaction = $group->sortByDesc('transaction_date')->first();
+
+                // Calculate price using the latest transaction date (most recent price)
                 $price = \App\Models\DailyTransaction::calculatePriceForBreadType(
                     $breadType,
                     $company,
-                    $first->transaction_date
+                    $latestTransaction->transaction_date
                 );
 
-                // Sum quantities
+                // Sum quantities across all transactions in the period
                 $quantity = $group->sum(function($item) {
                     return $item->delivered - $item->returned - $item->gratis;
                 });
