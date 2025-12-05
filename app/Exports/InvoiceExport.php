@@ -43,52 +43,43 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
         $result = new Collection();
 
         $query = "
-            WITH transaction_prices AS (
+            WITH latest_prices AS (
                 SELECT
-                    dt.id,
-                    dt.company_id,
-                    dt.bread_type_id,
-                    dt.transaction_date,
-                    dt.delivered,
-                    dt.returned,
-                    dt.gratis,
-                    COALESCE(
-                        (SELECT price
-                         FROM bread_type_company btc
-                         WHERE btc.bread_type_id = dt.bread_type_id
-                         AND btc.company_id = dt.company_id
-                         AND btc.valid_from <= dt.transaction_date
-                         ORDER BY btc.valid_from DESC
-                         LIMIT 1),
-                        bt.price
-                    ) as price
-                FROM daily_transactions dt
-                JOIN bread_types bt ON dt.bread_type_id = bt.id
-                WHERE dt.transaction_date BETWEEN ? AND ?
+                    bread_type_id,
+                    company_id,
+                    price,
+                    valid_from,
+                    ROW_NUMBER() OVER (PARTITION BY bread_type_id, company_id ORDER BY valid_from DESC) as rn
+                FROM bread_type_company
+                WHERE valid_from <= ?
             )
             SELECT
                 c.code as company_code,
                 c.name as company_name,
                 bt.code as bread_code,
                 bt.name as bread_name,
-                SUM(tp.delivered - tp.returned - tp.gratis) as quantity,
-                tp.price,
+                SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
+                COALESCE(lp.price, bt.price) as price,
                 c.mygpm_business_unit,
                 cu.user_id
-            FROM transaction_prices tp
-            JOIN companies c ON tp.company_id = c.id
-            JOIN bread_types bt ON tp.bread_type_id = bt.id
+            FROM daily_transactions dt
+            JOIN companies c ON dt.company_id = c.id
+            JOIN bread_types bt ON dt.bread_type_id = bt.id
+            LEFT JOIN latest_prices lp ON lp.bread_type_id = dt.bread_type_id
+                AND lp.company_id = dt.company_id
+                AND lp.rn = 1
             LEFT JOIN company_user cu ON c.id = cu.company_id
             WHERE c.type = 'invoice'
+            AND dt.transaction_date BETWEEN ? AND ?
             GROUP BY
                 c.code,
                 c.name,
                 bt.code,
                 bt.name,
-                tp.price,
+                COALESCE(lp.price, bt.price),
                 c.mygpm_business_unit,
                 cu.user_id
-            HAVING SUM(tp.delivered - tp.returned - tp.gratis) > 0
+            HAVING SUM(dt.delivered - dt.returned - dt.gratis) > 0
             ORDER BY
                 cu.user_id,
                 c.code,
@@ -102,7 +93,7 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
             'start_date' => $this->startDate
         ]);
 
-        $transactions = \DB::select($query, [$this->startDate, $this->endDate]);
+        $transactions = \DB::select($query, [$this->endDate, $this->startDate, $this->endDate]);
 
         \Log::info('Query results:', [
             'count' => count($transactions),
