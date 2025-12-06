@@ -61,10 +61,18 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
                            AND btc.valid_from <= dt.transaction_date
                          ORDER BY btc.valid_from DESC
                          LIMIT 1),
-                        (SELECT bt.price FROM bread_types bt WHERE bt.id = dt.bread_type_id)
+                        CASE 
+                            WHEN COALESCE(c.price_group, 0) = 1 AND COALESCE(bt.price_group_1, 0) > 0 THEN bt.price_group_1
+                            WHEN COALESCE(c.price_group, 0) = 2 AND COALESCE(bt.price_group_2, 0) > 0 THEN bt.price_group_2
+                            WHEN COALESCE(c.price_group, 0) = 3 AND COALESCE(bt.price_group_3, 0) > 0 THEN bt.price_group_3
+                            WHEN COALESCE(c.price_group, 0) = 4 AND COALESCE(bt.price_group_4, 0) > 0 THEN bt.price_group_4
+                            WHEN COALESCE(c.price_group, 0) = 5 AND COALESCE(bt.price_group_5, 0) > 0 THEN bt.price_group_5
+                            ELSE bt.price
+                        END
                     ) as price
                 FROM daily_transactions dt
                 JOIN companies c ON dt.company_id = c.id
+                JOIN bread_types bt ON dt.bread_type_id = bt.id
                 WHERE c.type = 'invoice'
                   AND dt.transaction_date BETWEEN ? AND ?
             )
