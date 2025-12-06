@@ -13,6 +13,8 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHeadings, WithColumnFormatting, WithCustomValueBinder
 {
@@ -74,7 +76,7 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
                 SUM(twp.delivered - twp.returned - twp.gratis) as quantity,
                 twp.price,
                 c.mygpm_business_unit,
-                (SELECT cu.user_id FROM company_user cu WHERE cu.company_id = c.id LIMIT 1) as user_id
+                COALESCE((SELECT cu.user_id FROM company_user cu WHERE cu.company_id = c.id LIMIT 1), 0) as user_id
             FROM transaction_with_prices twp
             JOIN companies c ON twp.company_id = c.id
             JOIN bread_types bt ON twp.bread_type_id = bt.id
@@ -97,14 +99,14 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
         ";
 
         // Log the query parameters
-        \Log::info('Executing export query with params:', [
+        Log::info('Executing export query with params:', [
             'start_date' => $this->startDate,
             'end_date' => $this->endDate
         ]);
 
-        $transactions = \DB::select($query, [$this->startDate, $this->endDate]);
+        $transactions = DB::select($query, [$this->startDate, $this->endDate]);
 
-        \Log::info('Query results:', [
+        Log::info('Query results:', [
             'count' => count($transactions),
             'data' => $transactions
         ]);
