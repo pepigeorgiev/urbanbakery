@@ -43,45 +43,57 @@ class InvoiceExport extends DefaultValueBinder implements FromCollection, WithHe
         $result = new Collection();
 
         $query = "
-            WITH transaction_summary AS (
+            WITH transaction_with_prices AS (
                 SELECT
                     dt.company_id,
                     dt.bread_type_id,
-                    SUM(dt.delivered - dt.returned - dt.gratis) as quantity,
-                    MAX(dt.transaction_date) as max_transaction_date
+                    dt.transaction_date,
+                    dt.delivered,
+                    dt.returned,
+                    dt.gratis,
+                    COALESCE(
+                        (SELECT btc.price
+                         FROM bread_type_company btc
+                         WHERE btc.bread_type_id = dt.bread_type_id
+                           AND btc.company_id = dt.company_id
+                           AND btc.valid_from <= dt.transaction_date
+                         ORDER BY btc.valid_from DESC
+                         LIMIT 1),
+                        (SELECT bt.price FROM bread_types bt WHERE bt.id = dt.bread_type_id)
+                    ) as price
                 FROM daily_transactions dt
                 JOIN companies c ON dt.company_id = c.id
                 WHERE c.type = 'invoice'
                   AND dt.transaction_date BETWEEN ? AND ?
-                GROUP BY dt.company_id, dt.bread_type_id
-                HAVING SUM(dt.delivered - dt.returned - dt.gratis) > 0
             )
             SELECT
                 c.code as company_code,
                 c.name as company_name,
                 bt.code as bread_code,
                 bt.name as bread_name,
-                ts.quantity,
-                COALESCE(
-                    (SELECT btc.price
-                     FROM bread_type_company btc
-                     WHERE btc.bread_type_id = ts.bread_type_id
-                       AND btc.company_id = ts.company_id
-                       AND btc.valid_from <= ts.max_transaction_date
-                     ORDER BY btc.valid_from DESC
-                     LIMIT 1),
-                    bt.price
-                ) as price,
+                SUM(twp.delivered - twp.returned - twp.gratis) as quantity,
+                twp.price,
                 c.mygpm_business_unit,
                 (SELECT cu.user_id FROM company_user cu WHERE cu.company_id = c.id LIMIT 1) as user_id
-            FROM transaction_summary ts
-            JOIN companies c ON ts.company_id = c.id
-            JOIN bread_types bt ON ts.bread_type_id = bt.id
+            FROM transaction_with_prices twp
+            JOIN companies c ON twp.company_id = c.id
+            JOIN bread_types bt ON twp.bread_type_id = bt.id
+            GROUP BY
+                twp.company_id,
+                twp.bread_type_id,
+                twp.price,
+                c.code,
+                c.name,
+                bt.code,
+                bt.name,
+                c.mygpm_business_unit
+            HAVING SUM(twp.delivered - twp.returned - twp.gratis) > 0
             ORDER BY
                 user_id,
                 c.code,
                 c.mygpm_business_unit,
-                bt.code
+                bt.code,
+                twp.price DESC
         ";
 
         // Log the query parameters
